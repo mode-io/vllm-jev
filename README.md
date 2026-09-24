@@ -1,4 +1,9 @@
-<h1 align="center">vLLM Jev</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/vllm-jev-dark.svg">
+    <img src="docs/assets/vllm-jev-light.svg" alt="vLLM Jev" width="430">
+  </picture>
+</h1>
 
 <h3 align="center">Candidate decisions and probabilities, served by vLLM</h3>
 
