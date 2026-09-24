@@ -12,6 +12,9 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/Open-Jev-MIT.txt"]
 dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors", "huggingface_hub>=0.34,<2"]
 
+[project.scripts]
+vllm-jev = "vllm_jev.cli:main"
+
 [project.entry-points."vllm.general_plugins"]
 vllm_jev_model = "vllm_jev:register"
 

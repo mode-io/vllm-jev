@@ -16,19 +16,38 @@ For development, replace the last command with `uv pip install -e .` so source e
 
 ## Quickstart
 
-Download a supported model and start its server on GPU 0:
+Download a supported model and start its server:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B
+vllm-jev serve ZefanCai/Open-Jev-2B
 ```
 
-The launcher sets up the runtime with uv, downloads and prepares the model, and starts vLLM at `http://127.0.0.1:8795`. It reuses the environment and downloads on later runs. Check the server from another terminal:
+The command downloads and prepares the model, then starts native vLLM at `http://127.0.0.1:8795`. Later runs verify and reuse the prepared checkpoint. Check the server from another terminal:
 
 ```bash
 curl -f http://127.0.0.1:8795/health
 ```
 
 Send your first request using the [README example](../README.md#example). To serve another model, replace the Hugging Face ID with one from the table below.
+
+### Serving options
+
+Choose a GPU and pass standard vLLM flags after the model ID:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm-jev serve IamBusy/OpenJev-0.6B \
+  --gpu-memory-utilization 0.90 --port 9000
+```
+
+The launcher defaults to pooling, a 4,096-token context, prefix caching, async scheduling, and a 90% GPU-memory budget. Extra vLLM flags override these defaults. `vllm-jev serve --help` lists launcher options; `vllm-jev serve --help=all` shows native vLLM options. See [Serve with vLLM directly](#serve-with-vllm-directly) for the equivalent native command.
+
+Use `--workspace /path/to/storage` or `VLLM_JEV_HOME` to choose where prepared models are stored. The default is `.local/` in the current directory. Source downloads use `HF_HOME` when set, or `<workspace>/.cache` otherwise. `--protocol auto` detects the model format; an explicit protocol checks that the model matches it.
+
+From a repository checkout, the bootstrap script can install the runtime and start the same command in one step:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B
+```
 
 ### Prepare and start separately
 
@@ -46,7 +65,7 @@ VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
 
 ## Supported models
 
-Pass one of these Hugging Face model IDs to `quickstart.sh`. With the default `--protocol auto`, the launcher checks the repository layout and selects a native vLLM scoring protocol.
+Pass one of these Hugging Face model IDs to `vllm-jev serve`. With the default `--protocol auto`, the launcher checks the repository layout and selects a native vLLM scoring protocol.
 
 | Model ID | Native protocol | Readout |
 |---|---|---|
@@ -55,7 +74,7 @@ Pass one of these Hugging Face model IDs to `quickstart.sh`. With the default `-
 | [`IamBusy/OpenJev-0.6B`](https://huggingface.co/IamBusy/OpenJev-0.6B) | `openjev_branch_v03` | Qwen3 candidate branches + scalar head |
 | [`lostargon/Tiny-Jev`](https://huggingface.co/lostargon/Tiny-Jev) | `tiny_jev_marker` | Qwen3 token embeddings + marker-position head |
 
-Files are saved under `.local/` by default; set `VLLM_JEV_HOME=/path/to/storage` to move the launcher's runtime, cache, and checkpoint together. The exported model is stored at `checkpoint/<Hugging Face ID>`. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
+The exported model is stored at `<workspace>/checkpoint/<Hugging Face ID>`. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
 
 Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded for each model; a direct Choice request can override it. To require a specific format, pass `--protocol open_jev_choice`, `--protocol openjev_branch_v03`, or `--protocol tiny_jev_marker` after the model ID. The override still checks the repository layout. The default is `auto`.
 

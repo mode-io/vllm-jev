@@ -29,15 +29,25 @@ uv pip install .
 
 For development, use an [editable installation](docs/guide.md#installation).
 
-After [preparing a model](docs/guide.md#prepare-and-start-separately), start the server with `vllm serve`:
+Start a server with a supported Hugging Face model ID:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 vllm serve .local/checkpoint/ZefanCai/Open-Jev-2B \
-  --runner pooling --convert none --max-model-len 4096 \
-  --enable-prefix-caching --mamba-cache-mode align \
-  --mamba-ssm-cache-dtype float32 --async-scheduling \
-  --host 127.0.0.1 --port 8795
+vllm-jev serve ZefanCai/Open-Jev-2B
 ```
+
+The command downloads and prepares the model, then starts native vLLM at `http://127.0.0.1:8795`. Later runs reuse the prepared checkpoint.
+
+<details>
+<summary>GPU, port, and serving options</summary>
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B \
+  --gpu-memory-utilization 0.90 --port 8795
+```
+
+Add standard `vllm serve` flags to override the defaults. See [serving options](docs/guide.md#serving-options) for cache paths, protocol selection, and the equivalent native command.
+
+</details>
 
 Visit our [documentation](docs/guide.md) to learn more.
 
