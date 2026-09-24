@@ -124,7 +124,17 @@ See the official [engine arguments](https://docs.vllm.ai/en/v0.29.0/configuratio
 
 ## Compatibility and validation
 
-The one-command profiles load the released **Qwen3.5 scalar-head Open-Jev 2B/9B** models. Other Jev-style projects, including [Laya](https://github.com/NandhaKishorM/laya) and [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev), use different readouts. Their weights need their own model adapters. The `/v1/systemone` route provides a familiar request shape; it does not make those weights interchangeable.
+The one-command profiles load the released **Qwen3.5 scalar-head Open-Jev 2B/9B** models. A Hugging Face repository name identifies a checkpoint; it does not specify how to score candidates. We checked these other public repositories by their model cards, configurations, and file layouts. Four full repository IDs were also passed to the current loader; it rejected them before downloading weights.
+
+| Repository | Published format | Current plugin |
+|---|---|---|
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Qwen3-0.6B LoRA and separate `head.safetensors` | Needs a Qwen3 adapter and its own prompt/calibration importer. |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Full `tiny_jev` model with a marker-token decision head | Needs its custom model architecture. |
+| [com-kotobalabs/open-jev-deberta-v3-large](https://huggingface.co/com-kotobalabs/open-jev-deberta-v3-large) | DeBERTa encoder and multi-option head | Needs a different pooling model. |
+| [apus-ailab/APUS-OpenJev-v1-4B](https://huggingface.co/apus-ailab/APUS-OpenJev-v1-4B) | Qwen3.5 generative model with vocabulary-based candidate scoring | Native generation weights do not supply this plugin's scalar head. |
+| [ZefanCai/Open-Jev-27B-v1.1](https://huggingface.co/ZefanCai/Open-Jev-27B-v1.1) | Similar LoRA/head package on Qwen3.8-27B | Package shape is close, but the Qwen3.8 backbone is not supported here. |
+
+This is a format check, not a GPU inference or accuracy comparison for those five models. The `/v1/systemone` route provides a familiar request shape; it does not make different weights interchangeable. Other Jev-style projects, including [Laya](https://github.com/NandhaKishorM/laya) and [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev), also use different readouts.
 
 Both public profiles started with the pinned runtime and passed Choice, Noul, and Score response checks. One prompt per profile selected the same candidate as the original HF/PEFT path. Maximum candidate-probability differences on those prompts were **0.00195 (2B)** and **0.00078 (9B)**. These are spot checks, not full accuracy benchmarks. Load tests exercised varied prompt lengths, option counts, and concurrency without response errors.
 
