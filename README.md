@@ -29,6 +29,16 @@ uv pip install .
 
 For development, use an [editable installation](docs/guide.md#installation).
 
+After [preparing a model](docs/guide.md#prepare-and-start-separately), start the server with `vllm serve`:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve .local/checkpoint/ZefanCai/Open-Jev-2B \
+  --runner pooling --convert none --max-model-len 4096 \
+  --enable-prefix-caching --mamba-cache-mode align \
+  --mamba-ssm-cache-dtype float32 --async-scheduling \
+  --host 127.0.0.1 --port 8795
+```
+
 Visit our [documentation](docs/guide.md) to learn more.
 
 - [Installation](docs/guide.md#installation)
