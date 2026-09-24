@@ -50,7 +50,7 @@ CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B \
   --gpu-memory-utilization 0.90 --port 8795
 ```
 
-Add standard `vllm serve` flags to override the defaults. See [serving options](docs/guide.md#serving-options) for cache paths, protocol selection, and the equivalent native command.
+Add standard `vllm serve` flags to override the defaults. See [serving options](docs/guide.md#serving-options) for storage locations and other flags.
 
 </details>
 
@@ -83,7 +83,7 @@ curl -sS http://127.0.0.1:8795/v1/systemone \
 
 The response contains `answers.intent.choice` and `answers.intent.probabilities` for the supplied labels.
 
-See the [integration guide](docs/guide.md) for API fields, model export, storage paths, vLLM options, and multi-GPU serving. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
+See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
 ## Hosted inference performance
 
@@ -116,7 +116,7 @@ Measured on one A800 GPU, with the author and vLLM Jev services run **sequential
 
 ² Tiny-Jev publishes a Python inference API, not an HTTP server. The baseline uses that API behind a minimal benchmark-only HTTP service on the same GPU. The shim serializes calls, as do the other author services.
 
-The Open-Jev 2B/9B author servers used their `--prefix-cache` option and the projects' pinned Transformers 5.10.2 / PEFT 0.19.1 versions. Their optional flash-linear-attention kernels were unavailable, so Transformers used its torch reference path. vLLM Jev used its documented default compiled, async, 90% GPU-memory launch. At concurrency 8, gains include queueing in the author HTTP services and vLLM batching; they are serving-path gains, not isolated kernel speedups. The repeated requests do not measure model accuracy or cross-model quality. [Integration details](docs/guide.md) explain the three readout protocols.
+The Open-Jev 2B/9B author servers used their `--prefix-cache` option and the projects' pinned Transformers 5.10.2 / PEFT 0.19.1 versions. Their optional flash-linear-attention kernels were unavailable, so Transformers used its torch reference path. vLLM Jev used its documented default compiled, async, 90% GPU-memory launch. At concurrency 8, gains include queueing in the author HTTP services and vLLM batching; they are serving-path gains, not isolated kernel speedups. The repeated requests do not measure model accuracy or cross-model quality.
 
 ## License
 
