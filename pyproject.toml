@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-jev"
+version = "0.1.0"
+description = "Native vLLM pooling and endpoint integration for Jev candidate scoring"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors"]
+
+[project.entry-points."vllm.general_plugins"]
+vllm_jev_model = "vllm_jev.model:register"
+
+[project.entry-points."vllm.endpoint_plugins"]
+vllm_jev_endpoint = "vllm_jev.endpoint:JevEndpointPlugin"
+
+[tool.setuptools.packages.find]
+include = ["vllm_jev*"]
