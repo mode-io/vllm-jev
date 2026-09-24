@@ -6,8 +6,8 @@ from pathlib import Path
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+from . import QWEN3_TOKEN_ARCHITECTURE
 from .checkpoint import sha256
-from .model import QWEN3_TOKEN_ARCHITECTURE
 
 
 def export_tiny(source: Path, output: Path, model_id: str, revision: str) -> dict:

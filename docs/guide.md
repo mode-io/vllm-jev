@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B
 CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh lostargon/Tiny-Jev
 ```
 
-The script calls `install_runtime.sh`, prepares the checkpoint, and calls `serve.sh`. Files are saved under `.local/` by default; set `VLLM_JEV_HOME=/path/to/storage` to move the runtime, cache, and checkpoint together. The exported model is stored at `checkpoint/<Hugging Face ID>`. Existing `open-jev-2b` and `open-jev-9b` directories are reused through links at their new paths. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
+The script calls `install_runtime.sh`, prepares the checkpoint, and calls `serve.sh`. Files are saved under `.local/` by default; set `VLLM_JEV_HOME=/path/to/storage` to move the runtime, cache, and checkpoint together. The exported model is stored at `checkpoint/<Hugging Face ID>`. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
 
 Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded for each model; a direct Choice request can override it. To require a specific format, pass `--protocol open_jev_choice`, `--protocol openjev_branch_v03`, or `--protocol tiny_jev_marker` after the model ID. The override still checks the repository layout. The default is `auto`.
 
@@ -55,7 +55,7 @@ The package uses two official [vLLM plugin entry points](https://docs.vllm.ai/en
 | `vllm.general_plugins` | Register the Qwen3/Qwen3.5 scalar and token-embedding models. |
 | `vllm.endpoint_plugins` | Add the Choice and System One HTTP routes. |
 
-vLLM handles scheduling, batching, compilation, and KV-cache management. The two branch protocols call `EngineClient.encode` with `task="classify"` for each candidate and share a request-local cache salt. Tiny-Jev sends one sequence with `task="token_embed"` and scores its option positions in the endpoint.
+vLLM handles scheduling, batching, compilation, and KV-cache management. The two branch protocols call `EngineClient.encode` with `task="classify"` for each candidate and share a request-local cache salt. Tiny-Jev sends one sequence with `task="token_embed"` and scores its option positions in the endpoint. It skips prefix-cache reads because the readout needs token hidden states that a KV cache does not store.
 
 ## HTTP API
 

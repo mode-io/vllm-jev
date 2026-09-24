@@ -5,4 +5,3 @@
 - [OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) is released under Apache-2.0. The `openjev_branch_v03` adapter follows its public candidate-branch and calibration format. Its Qwen3 base and adapter/head weights are downloaded separately.
 - [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) is released under Apache-2.0. The `tiny_jev_marker` adapter follows its published option-marker positions and decision-head calculation. Its weights are downloaded separately; its custom Python model file is not executed or vendored.
 - [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B) and [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-2B) base weights are downloaded separately and are not included in this repository.
-- [MMLU](https://huggingface.co/datasets/cais/mmlu) test inputs are used only by local benchmark scripts. Raw dataset rows are not included in this repository.

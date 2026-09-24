@@ -8,7 +8,7 @@ from pathlib import Path
 
 from safetensors import safe_open
 
-from .model import ARCHITECTURE, QWEN3_ARCHITECTURE, QWEN3_TOKEN_ARCHITECTURE
+from . import ARCHITECTURE, QWEN3_ARCHITECTURE, QWEN3_TOKEN_ARCHITECTURE
 
 
 def sha256(path: Path) -> str:

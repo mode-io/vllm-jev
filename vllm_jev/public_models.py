@@ -10,7 +10,6 @@ from pathlib import Path
 from huggingface_hub import snapshot_download
 
 from .checkpoint import sha256, verify
-from .export import export
 
 PROFILES = {
     "2b": (
@@ -54,10 +53,6 @@ def prepare(profile: str, workspace: Path) -> Path:
     adapter_hash, head_hash, temperature_hash = RELEASE_HASHES[profile]
     workspace = workspace.resolve()
     output = workspace / "checkpoint" / adapter_id
-    legacy_output = workspace / "checkpoint" / f"open-jev-{profile}"
-    using_legacy = not output.exists() and legacy_output.is_dir()
-    if using_legacy:
-        output = legacy_output
     if output.exists():
         verify(output, full=True)
         manifest = json.loads((output / "jev_manifest.json").read_text())
@@ -68,11 +63,6 @@ def prepare(profile: str, workspace: Path) -> Path:
             or manifest.get("source_temperature_sha256") != temperature_hash
         ):
             raise ValueError("existing checkpoint does not match the public release")
-        if using_legacy:
-            canonical = workspace / "checkpoint" / adapter_id
-            canonical.parent.mkdir(parents=True, exist_ok=True)
-            canonical.symlink_to(output, target_is_directory=True)
-            return canonical
         return output
 
     package = (
@@ -119,6 +109,8 @@ def prepare(profile: str, workspace: Path) -> Path:
         tempfile.mkdtemp(prefix=f".open-jev-{profile}-", dir=output.parent)
     )
     try:
+        from .export import export
+
         export(base, package / "adapter", package / "head.pt", temporary)
         verify(temporary, full=True)
         temporary.replace(output)

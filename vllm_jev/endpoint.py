@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from vllm import PoolingParams
+from vllm.entrypoints.serve.utils.api_utils import load_aware_call, with_cancellation
 
 from .prompt import (
     branch_token_ids,
@@ -27,7 +28,7 @@ class ChoiceRequest(BaseModel):
     state: Any
     question: str
     options: list[str] = Field(min_length=2, max_length=255)
-    temperature: float | None = Field(default=None, gt=0.0)
+    temperature: float | None = Field(default=None, gt=0.0, allow_inf_nan=False)
     cache_salt: str | None = None
     use_prefix_cache: bool = True
     priority: int = 0
@@ -61,7 +62,7 @@ class _JevService:
         tokenizer,
         max_inflight: int = 128,
         default_temperature: float = 1.0,
-        model_id: str = "vllm-jev",
+        model_id: str | list[str] = "vllm-jev",
         protocol: str = "open_jev_choice",
         temperatures: dict[str, float] | None = None,
         head: tuple[Any, Any] | None = None,
@@ -71,7 +72,8 @@ class _JevService:
         self.tokenizer = tokenizer
         self.semaphore = asyncio.Semaphore(max_inflight)
         self.default_temperature = default_temperature
-        self.model_id = model_id
+        self.model_names = [model_id] if isinstance(model_id, str) else model_id
+        self.model_id = self.model_names[0]
         self.protocol = protocol
         self.temperatures = temperatures or {
             kind: default_temperature for kind in ("choice", "noul", "score")
@@ -79,13 +81,14 @@ class _JevService:
         self.head = head
         self.marker = marker
 
-    async def _one_score(
+    async def _encode(
         self,
         prompt: str | list[int],
         cache_salt: str,
         use_prefix_cache: bool,
         priority: int,
-    ) -> tuple[float, int, int]:
+        task: str = "classify",
+    ):
         request_id = f"jev-{uuid.uuid4().hex}"
         completed = False
         async with self.semaphore:
@@ -97,9 +100,9 @@ class _JevService:
                         else {"prompt": prompt, "cache_salt": cache_salt}
                     ),
                     pooling_params=PoolingParams(
-                        task="classify",
+                        task=task,
                         use_activation=False,
-                        skip_reading_prefix_cache=not use_prefix_cache,
+                        skip_reading_prefix_cache=True if not use_prefix_cache else None,
                     ),
                     request_id=request_id,
                     priority=priority,
@@ -110,12 +113,22 @@ class _JevService:
                 if final is None or not final.finished:
                     raise RuntimeError("vLLM returned no final pooling result")
                 completed = True
-                scalar = float(final.outputs.data.reshape(-1)[0])
-                return scalar, int(final.num_cached_tokens), len(final.prompt_token_ids)
+                return final
             finally:
                 if not completed:
                     with suppress(Exception):
                         await self.engine_client.abort(request_id)
+
+    async def _one_score(
+        self,
+        prompt: str | list[int],
+        cache_salt: str,
+        use_prefix_cache: bool,
+        priority: int,
+    ) -> tuple[float, int, int]:
+        final = await self._encode(prompt, cache_salt, use_prefix_cache, priority)
+        scalar = float(final.outputs.data.reshape(-1)[0])
+        return scalar, int(final.num_cached_tokens), len(final.prompt_token_ids)
 
     async def _token_scores(
         self,
@@ -128,48 +141,24 @@ class _JevService:
         import torch
         import torch.nn.functional as functional
 
-        request_id = f"jev-{uuid.uuid4().hex}"
-        completed = False
-        async with self.semaphore:
-            try:
-                iterator = self.engine_client.encode(
-                    prompt={"prompt_token_ids": ids, "cache_salt": salt},
-                    pooling_params=PoolingParams(
-                        task="token_embed",
-                        use_activation=False,
-                        skip_reading_prefix_cache=not use_prefix_cache,
-                    ),
-                    request_id=request_id,
-                    priority=priority,
-                )
-                final = None
-                async for output in iterator:
-                    final = output
-                if final is None or not final.finished:
-                    raise RuntimeError("vLLM returned no final token embedding")
-                completed = True
-                weight, bias = self.head
-                hidden = torch.as_tensor(final.outputs.data).reshape(
-                    -1, weight.shape[1]
-                )
-                selected = hidden[positions].float()
-                scores = (
-                    functional.linear(
-                        functional.layer_norm(selected, (weight.shape[1],)).to(
-                            weight.dtype
-                        ),
-                        weight,
-                        bias,
-                    )
-                    .float()
-                    .flatten()
-                    .tolist()
-                )
-                return scores, int(final.num_cached_tokens), len(final.prompt_token_ids)
-            finally:
-                if not completed:
-                    with suppress(Exception):
-                        await self.engine_client.abort(request_id)
+        # vLLM skips cache reads for token_embed to return every token's state.
+        final = await self._encode(ids, salt, use_prefix_cache, priority, "token_embed")
+        weight, bias = self.head
+        hidden = torch.as_tensor(final.outputs.data).reshape(-1, weight.shape[1])
+        if hidden.shape[0] != len(ids):
+            raise RuntimeError("vLLM returned an incomplete token embedding sequence")
+        selected = hidden[positions].float()
+        scores = (
+            functional.linear(
+                functional.layer_norm(selected, (weight.shape[1],)).to(weight.dtype),
+                weight,
+                bias,
+            )
+            .float()
+            .flatten()
+            .tolist()
+        )
+        return scores, int(final.num_cached_tokens), len(final.prompt_token_ids)
 
     async def choice(self, payload: ChoiceRequest, kind: str = "choice") -> dict:
         started = time.perf_counter()
@@ -280,7 +269,7 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
         "open-jev",
         "jev-latest",
         "vllm-jev",
-        service.model_id,
+        *service.model_names,
     ):
         raise ValueError("requested model is not loaded")
     if not isinstance(payload.state, (str, dict, list)):
@@ -474,6 +463,8 @@ class JevEndpointPlugin:
 
     def attach_router(self, app: FastAPI) -> None:
         @app.post("/plugins/vllm-jev/choice")
+        @with_cancellation
+        @load_aware_call
         async def choice(payload: ChoiceRequest, raw_request: Request):
             service = getattr(raw_request.app.state, "vllm_jev_service", None)
             if service is None:
@@ -484,6 +475,8 @@ class JevEndpointPlugin:
                 raise HTTPException(status_code=422, detail=str(error)) from error
 
         @app.post("/plugins/vllm-jev/batch")
+        @with_cancellation
+        @load_aware_call
         async def batch(payload: BatchChoiceRequest, raw_request: Request):
             service = getattr(raw_request.app.state, "vllm_jev_service", None)
             if service is None:
@@ -508,6 +501,8 @@ class JevEndpointPlugin:
             }
 
         @app.post("/v1/systemone")
+        @with_cancellation
+        @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
             service = getattr(raw_request.app.state, "vllm_jev_service", None)
             if service is None:
@@ -518,25 +513,21 @@ class JevEndpointPlugin:
                 raise HTTPException(status_code=422, detail=str(error)) from error
 
     async def init_state(self, engine_client, state, args) -> None:
-        if engine_client is None:
-            state.vllm_jev_service = None
+        state.vllm_jev_service = None
+        manifest = Path(args.model) / "jev_manifest.json"
+        if engine_client is None or not manifest.is_file():
             return
         import os
 
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
         if max_inflight < 1:
             raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
-        manifest = Path(args.model) / "jev_manifest.json"
-        default_temperature = 1.0
-        protocol = "open_jev_choice"
-        temperatures = None
+        data = json.loads(manifest.read_text())
+        default_temperature = data.get("calibration_temperature", 1.0)
+        protocol = data.get("prompt_protocol", "open_jev_choice")
+        temperatures = data.get("calibration_temperatures")
         head = None
         marker = (" - correct?", "<opt>")
-        if manifest.is_file():
-            data = json.loads(manifest.read_text())
-            default_temperature = data.get("calibration_temperature", 1.0)
-            protocol = data.get("prompt_protocol", protocol)
-            temperatures = data.get("calibration_temperatures")
         if (
             not isinstance(default_temperature, (int, float))
             or not math.isfinite(default_temperature)
@@ -562,15 +553,12 @@ class JevEndpointPlugin:
             tensors = load_file(str(Path(args.model) / "score.safetensors"))
             head = (tensors["weight"], tensors["bias"])
             marker = (config.get("cue", marker[0]), config.get("opt_token", marker[1]))
-        model_id = getattr(args, "served_model_name", None)
-        if isinstance(model_id, list):
-            model_id = model_id[0] if model_id else None
         state.vllm_jev_service = _JevService(
             engine_client,
             engine_client.get_tokenizer(),
             max_inflight,
             float(default_temperature),
-            model_id if isinstance(model_id, str) and model_id else "vllm-jev",
+            getattr(args, "served_model_name", None) or "vllm-jev",
             protocol,
             temperatures,
             head,

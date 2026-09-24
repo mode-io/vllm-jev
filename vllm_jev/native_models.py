@@ -11,10 +11,8 @@ from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import validate_repo_id
 
 from .checkpoint import sha256, verify
-from .export import export
 from .public_models import PROFILES
 from .public_models import prepare as prepare_open_jev
-from .tiny import export_tiny
 
 BRANCH_PROTOCOL = "openjev_branch_v03"
 CHOICE_PROTOCOL = "open_jev_choice"
@@ -139,6 +137,8 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         base = Path(
             snapshot_download(repo_id=base_id, revision=base_revision, token=False)
         )
+        from .export import export
+
         return _publish(
             output,
             model_id,
@@ -151,6 +151,8 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
     if {"modeling_tiny_jev.py", "model.safetensors", "config.json"} <= files:
         if protocol not in ("auto", TINY_PROTOCOL):
             raise ValueError(f"{model_id} uses {TINY_PROTOCOL}, not {protocol}")
+        from .tiny import export_tiny
+
         source = Path(
             snapshot_download(
                 repo_id=model_id,
@@ -220,6 +222,8 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
             token=False,
         )
     )
+    from .export import export
+
     return _publish(
         output,
         model_id,

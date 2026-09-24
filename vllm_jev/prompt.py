@@ -13,7 +13,7 @@ def render_value(value):
     )
 
 
-def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
+def _validate_choice(state, question, options: Sequence[str]) -> None:
     if not isinstance(state, (str, dict, list)):
         raise ValueError("state must be text or a JSON-compatible object")
     if not isinstance(question, str) or not question.strip():
@@ -24,6 +24,10 @@ def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
         raise ValueError("every candidate must be nonempty text")
     if len(set(options)) != len(options):
         raise ValueError("candidates must be distinct")
+
+
+def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
+    _validate_choice(state, question, options)
     prefix = f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
     return [
         prefix
@@ -44,7 +48,7 @@ def branch_token_ids(
     tokenizer, state, question: str, options: Sequence[str]
 ) -> list[list[int]]:
     """Keep OpenJev-0.6B's independently tokenized prefix and suffix."""
-    candidate_prompts(state, question, options)  # Validate the common Choice contract.
+    _validate_choice(state, question, options)
     marker = "OPENJEV_STATE_SLOT_7429"
     template = tokenizer.apply_chat_template(
         [
@@ -98,9 +102,11 @@ def tiny_token_ids(
     opt_token: str = "<opt>",
 ) -> tuple[list[int], list[int]]:
     """Encode Tiny-Jev's single sequence and candidate readout positions."""
-    candidate_prompts(state, question, options)
+    _validate_choice(state, question, options)
     state_text = (
-        state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+        state
+        if isinstance(state, str)
+        else json.dumps(state, ensure_ascii=False, allow_nan=False)
     )
 
     def ids_of(value):
@@ -135,9 +141,8 @@ def probabilities(scores: Sequence[float], temperature: float = 1.0) -> list[flo
         raise ValueError("scores and positive finite temperature are required")
     if any(not math.isfinite(score) for score in scores):
         raise ValueError("scores must be finite")
-    shifted = [score / temperature for score in scores]
-    peak = max(shifted)
-    weights = [math.exp(score - peak) for score in shifted]
+    peak = max(scores)
+    weights = [math.exp((score - peak) / temperature) for score in scores]
     total = sum(weights)
     return [weight / total for weight in weights]
 

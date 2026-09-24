@@ -12,8 +12,8 @@ from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from transformers import AutoConfig, AutoTokenizer, Qwen3_5ForCausalLM, Qwen3ForCausalLM
 
+from . import ARCHITECTURE, QWEN3_ARCHITECTURE
 from .checkpoint import sha256
-from .model import ARCHITECTURE, QWEN3_ARCHITECTURE
 
 
 def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
@@ -38,15 +38,8 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
             local_files_only=True,
         )
         # This release trained LoRA on the inner text backbone.
-        backbone = model.model
-        reference_weight = (
-            backbone.layers[0].linear_attn.in_proj_qkv.weight.detach().float().clone()
-        )
-        peft = PeftModel.from_pretrained(backbone, adapter, is_trainable=False)
+        peft = PeftModel.from_pretrained(model.model, adapter, is_trainable=False)
         model.model = peft.merge_and_unload(safe_merge=True)
-        merged_weight = (
-            model.model.layers[0].linear_attn.in_proj_qkv.weight.detach().float()
-        )
         old_prefix = "model.language_model."
     elif config.model_type == "qwen3":
         architecture, prompt_protocol = QWEN3_ARCHITECTURE, "openjev_branch_v03"
@@ -57,19 +50,11 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
             device_map={"": "cuda:0"},
             local_files_only=True,
         )
-        reference_weight = (
-            model.model.layers[0].self_attn.q_proj.weight.detach().float().clone()
-        )
         peft = PeftModel.from_pretrained(model, adapter, is_trainable=False)
         model = peft.merge_and_unload(safe_merge=True)
-        merged_weight = model.model.layers[0].self_attn.q_proj.weight.detach().float()
         old_prefix = "model."
     else:
         raise ValueError(f"unsupported scalar-head backbone: {config.model_type}")
-    merge_max_delta = float((merged_weight - reference_weight).abs().max())
-    if merge_max_delta <= 0:
-        raise ValueError("LoRA merge did not change the backbone")
-    del reference_weight
     model.eval()
 
     head = (
@@ -196,7 +181,6 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
         "adapter_weights_sha256": sha256(adapter / "adapter_model.safetensors"),
         "head_sha256": sha256(head_path),
         "score_weight_dtype": str(weight.dtype),
-        "merge_max_abs_delta_layer0": merge_max_delta,
         "score_bias": float(bias[0]),
         "score_semantics": "final hidden scalar; candidate softmax after all candidates; no token generation",
         "files": {p.name: sha256(p) for p in output.iterdir() if p.is_file()},

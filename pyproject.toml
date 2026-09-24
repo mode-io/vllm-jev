@@ -13,7 +13,7 @@ license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/Open-Jev-MIT.txt
 dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors", "huggingface_hub>=0.34,<2"]
 
 [project.entry-points."vllm.general_plugins"]
-vllm_jev_model = "vllm_jev.model:register"
+vllm_jev_model = "vllm_jev:register"
 
 [project.entry-points."vllm.endpoint_plugins"]
 vllm_jev_endpoint = "vllm_jev.endpoint:JevEndpointPlugin"
