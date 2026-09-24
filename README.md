@@ -55,6 +55,17 @@ Visit our [documentation](docs/guide.md) to learn more.
 - [Quickstart](docs/guide.md#quickstart)
 - [List of Supported Models](docs/guide.md#supported-models)
 
+## Supported Models
+
+Choose a model and run its command:
+
+| Model | Start server |
+|---|---|
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
+
 ## Example
 
 With the server running, send a Choice request:

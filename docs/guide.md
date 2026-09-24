@@ -43,6 +43,9 @@ The launcher defaults to pooling, a 4,096-token context, prefix caching, async s
 
 Use `--workspace /path/to/storage` or `VLLM_JEV_HOME` to choose where prepared models are stored. The default is `.local/` in the current directory. Source downloads use `HF_HOME` when set, or `<workspace>/.cache` otherwise. `--protocol auto` detects the model format; an explicit protocol checks that the model matches it.
 
+<details>
+<summary>Setup scripts and manual preparation</summary>
+
 From a repository checkout, the bootstrap script can install the runtime and start the same command in one step:
 
 ```bash
@@ -59,13 +62,24 @@ export CUDA_VISIBLE_DEVICES=0
 HF_HOME="$PWD/.local/.cache" \
   .local/runtime/bin/python -m vllm_jev.native_models ZefanCai/Open-Jev-2B --workspace .local
 
-VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
-  bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B
+vllm-jev serve ZefanCai/Open-Jev-2B
 ```
+
+</details>
 
 ## Supported models
 
-Pass one of these Hugging Face model IDs to `vllm-jev serve`. With the default `--protocol auto`, the launcher checks the repository layout and selects a native vLLM scoring protocol.
+Choose a model and run its command. Each command downloads, prepares, and serves the model. The default `--protocol auto` selects the matching native vLLM scoring protocol.
+
+| Model | Start server |
+|---|---|
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
+
+<details>
+<summary>Model protocols and readouts</summary>
 
 | Model ID | Native protocol | Readout |
 |---|---|---|
@@ -73,6 +87,8 @@ Pass one of these Hugging Face model IDs to `vllm-jev serve`. With the default `
 | [`ZefanCai/Open-Jev-9B`](https://huggingface.co/ZefanCai/Open-Jev-9B) | `open_jev_choice` | Qwen3.5 candidate branches + scalar head |
 | [`IamBusy/OpenJev-0.6B`](https://huggingface.co/IamBusy/OpenJev-0.6B) | `openjev_branch_v03` | Qwen3 candidate branches + scalar head |
 | [`lostargon/Tiny-Jev`](https://huggingface.co/lostargon/Tiny-Jev) | `tiny_jev_marker` | Qwen3 token embeddings + marker-position head |
+
+</details>
 
 The exported model is stored at `<workspace>/checkpoint/<Hugging Face ID>`. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
 
@@ -165,9 +181,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
   --served-model-name ZefanCai/Open-Jev-2B --host 127.0.0.1 --port 8795
 ```
 
-`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. Set `VLLM_JEV_MODEL_ID` to the Hugging Face ID for `/v1/models` and System One responses. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B VLLM_JEV_PORT=9000 bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
-
-Use native vLLM options to tune the server:
+`vllm-jev serve` applies these defaults automatically. Pass native vLLM options after the model ID to tune the server:
 
 | Option | Use |
 |---|---|
