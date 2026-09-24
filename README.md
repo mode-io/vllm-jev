@@ -1,19 +1,25 @@
 # vLLM Jev
 
-Jev-style multiple-choice scoring as a small [vLLM](https://github.com/vllm-project/vllm) pooling plugin. Each answer candidate receives one scalar classifier score; the plugin normalizes those scores into a choice and a probability distribution. vLLM remains responsible for model execution, batching, scheduling, compilation and KV caching.
+**Multiple-choice scoring on vLLM's native pooling runner.** Give the service a question and a list of candidate answers; it returns a selected answer and a probability for each candidate.
 
-This repository targets **vLLM 0.29.0** and an exported **Qwen3.5-4B** classifier checkpoint. It is a plugin, not a vLLM fork. Model weights, training data and load-test scripts are not included.
+**vLLM 0.29.0** · **Python 3.12+** · **Qwen3.5-4B** · **Apache-2.0**
+
+[Quick start](#quick-start) · [Request example](#try-it) · [How it works](#how-it-works) · [Integration guide](docs/guide.md)
+
+Jev adds a small model plugin and a typed HTTP endpoint. vLLM continues to handle model execution, batching, scheduling, compilation and KV caching. This repository contains no model weights, training data or load-test scripts.
 
 ## Quick start
 
-Install the pinned runtime and this package in an isolated environment:
+You need `uv`, a local Qwen3.5-4B base-model snapshot, a trained Jev adapter and its scalar `head.pt`.
+
+**1. Install the pinned runtime and plugin.**
 
 ```bash
 bash scripts/install_runtime.sh "$PWD"
 uv pip install --python "$PWD/runtime/bin/python" --no-deps --no-build-isolation -e .
 ```
 
-Export a checkpoint from an existing base-model snapshot, trained Jev adapter and scalar head:
+**2. Export the classifier checkpoint.** Keep the source weights and output outside the Git repository.
 
 ```bash
 export BASE_MODEL=/path/to/qwen3.5-4b
@@ -26,7 +32,7 @@ runtime/bin/python -m vllm_jev.export \
   --head "$JEV_HEAD" --output "$JEV_CHECKPOINT"
 ```
 
-Serve it with the standard vLLM CLI:
+**3. Serve with the official vLLM CLI.** Select a free GPU first.
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0
@@ -41,14 +47,20 @@ runtime/bin/vllm serve "$JEV_CHECKPOINT" \
   --served-model-name vllm-jev --host 127.0.0.1 --port 8795
 ```
 
-`scripts/serve.sh` provides the same tested defaults and verifies the checkpoint before startup. Set `VLLM_JEV_CHECKPOINT="$JEV_CHECKPOINT"` when using a checkpoint outside the repository. It accepts additional native vLLM options, such as `VLLM_JEV_CHECKPOINT="$JEV_CHECKPOINT" bash scripts/serve.sh --max-num-seqs 64`.
+Wait for `curl -f http://127.0.0.1:8795/health` to succeed. The optional `scripts/serve.sh` verifies the exported checkpoint and runs the same server defaults:
 
-## Make a Choice request
+```bash
+VLLM_JEV_CHECKPOINT="$JEV_CHECKPOINT" bash scripts/serve.sh
+```
+
+Additional vLLM flags pass through the script unchanged, for example `--max-num-seqs 64`.
+
+## Try it
 
 ```bash
 curl -sS http://127.0.0.1:8795/plugins/vllm-jev/choice \
   -H 'Content-Type: application/json' \
-  -d '{"state":"The sky is blue.","question":"What color is the sky?", "options":["A. Blue","B. Green","C. Red"]}'
+  -d '{"state":"The sky is blue.","question":"What color is the sky?","options":["A. Blue","B. Green","C. Red"]}'
 ```
 
 An abridged response from the evaluated checkpoint:
@@ -60,16 +72,25 @@ An abridged response from the evaluated checkpoint:
     "A. Blue": 0.9996636611863505,
     "B. Green": 0.00014645269890626773,
     "C. Red": 0.0001898861147431309
-  },
-  "selected_probability": 0.9996636611863505,
-  "confidence": 0.9994954917795258
+  }
 }
 ```
 
-The response contains the selected `choice`, raw candidate `scores`, conditional `probabilities`, `selected_probability`, `confidence`, token-cache counts and timing. `/plugins/vllm-jev/batch` accepts multiple decisions. The native vLLM `/classify`, `/pooling`, `/v1/models` and `/metrics` endpoints remain available.
+The full response also includes raw `scores`, `selected_probability`, `confidence`, cached/prompt token counts and timing. Probabilities are normalized **across the options in this request**. `confidence` is a score adjusted above a uniform-choice baseline; it is not a calibrated probability of correctness.
 
-`confidence` is a score adjusted above a uniform-choice baseline; it is **not** a calibrated probability of correctness. The default cache salt is fresh per decision, while candidates of that decision share it for prefix reuse. [The guide](docs/guide.md) explains the API contract, vLLM integration, multi-GPU serving, measured limits and feature compatibility.
+## How it works
+
+```text
+question + options
+   → one prompt and one scalar classifier score per option
+   → softmax across those scores
+   → choice + probabilities
+```
+
+Candidates in one decision share a cache salt so vLLM can reuse their common prefix; separate decisions receive fresh salts by default. `/plugins/vllm-jev/batch` accepts multiple decisions. Native vLLM `/classify`, `/pooling`, `/v1/models` and `/metrics` remain available.
+
+For API fields, multi-GPU behavior, tuning and measured limitations, see the [integration guide](docs/guide.md). The example server binds to loopback; add an authenticating proxy before exposing it to a network.
 
 ## License
 
-Apache-2.0. The Choice prompt contract follows [Open-Jev](https://github.com/Zefan-Cai/Open-Jev), which is MIT licensed. See [third-party notices](THIRD_PARTY_NOTICES.md). Keep the example server on loopback or put authentication in front of it before network exposure.
+Apache-2.0. The Choice prompt contract follows MIT-licensed [Open-Jev](https://github.com/Zefan-Cai/Open-Jev). See [third-party notices](THIRD_PARTY_NOTICES.md).
