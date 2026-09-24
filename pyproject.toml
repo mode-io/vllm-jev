@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Native vLLM pooling and endpoint integration for Jev candidate scoring"
 requires-python = ">=3.12"
 license = "Apache-2.0"
-dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors"]
+dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors", "huggingface_hub>=0.34,<2"]
 
 [project.entry-points."vllm.general_plugins"]
 vllm_jev_model = "vllm_jev.model:register"

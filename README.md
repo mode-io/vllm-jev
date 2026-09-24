@@ -1,96 +1,66 @@
 # vLLM Jev
 
-**Multiple-choice scoring on vLLM's native pooling runner.** Give the service a question and a list of candidate answers; it returns a selected answer and a probability for each candidate.
+**Serve public Open-Jev checkpoints with vLLM's native pooling engine.** Send a question and candidate answers; receive a typed choice and probabilities without generating probability digits.
 
-**vLLM 0.29.0** · **Python 3.12+** · **Qwen3.5-4B** · **Apache-2.0**
+**vLLM 0.29.0** · **Python 3.12+** · **Qwen3.5 2B / 9B** · **Apache-2.0**
 
-[Quick start](#quick-start) · [Request example](#try-it) · [How it works](#how-it-works) · [Integration guide](docs/guide.md)
+[One-command start](#one-command-start) · [Request example](#try-it) · [How it works](#how-it-works) · [Integration guide](docs/guide.md)
 
-Jev adds a small model plugin and a typed HTTP endpoint. vLLM continues to handle model execution, batching, scheduling, compilation and KV caching. This repository contains no model weights, training data or load-test scripts.
+## One-command start
 
-## Quick start
-
-You need `uv`, a local Qwen3.5-4B base-model snapshot, a trained Jev adapter and its scalar `head.pt`.
-
-**1. Install the pinned runtime and plugin.**
+From this repository on a machine with an NVIDIA GPU, Python 3 and network access:
 
 ```bash
-bash scripts/install_runtime.sh "$PWD"
-uv pip install --python "$PWD/runtime/bin/python" --no-deps --no-build-isolation -e .
+bash scripts/quickstart.sh
 ```
 
-**2. Export the classifier checkpoint.** Keep the source weights and output outside the Git repository.
+The default profile is the public [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B). For the public [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B), run `bash scripts/quickstart.sh 9b`. The script finds a free GPU, bootstraps `uv` if needed, installs the pinned vLLM runtime, downloads the released adapter/head and exact Qwen base revision from Hugging Face, exports a merged classifier, then starts `vllm serve` on `127.0.0.1:8795`. A fresh install downloads several gigabytes of CUDA/runtime packages and model weights and can take tens of minutes on a slower connection; later runs reuse them.
 
-```bash
-export BASE_MODEL=/path/to/qwen3.5-4b
-export JEV_ADAPTER=/path/to/adapter
-export JEV_HEAD=/path/to/head.pt
-export JEV_CHECKPOINT=/path/to/jev-checkpoint
-
-runtime/bin/python -m vllm_jev.export \
-  --base "$BASE_MODEL" --adapter "$JEV_ADAPTER" \
-  --head "$JEV_HEAD" --output "$JEV_CHECKPOINT"
-```
-
-**3. Serve with the official vLLM CLI.** Select a free GPU first.
-
-```bash
-export CUDA_VISIBLE_DEVICES=0
-export VLLM_PLUGINS=vllm_jev_model,vllm_jev_endpoint
-export VLLM_WORKER_MULTIPROC_METHOD=spawn
-
-runtime/bin/vllm serve "$JEV_CHECKPOINT" \
-  --runner pooling --convert none --max-model-len 4096 \
-  --enable-prefix-caching --mamba-cache-mode align \
-  --mamba-ssm-cache-dtype float32 --async-scheduling \
-  --gpu-memory-utilization 0.90 \
-  --served-model-name vllm-jev --host 127.0.0.1 --port 8795
-```
-
-Wait for `curl -f http://127.0.0.1:8795/health` to succeed. The optional `scripts/serve.sh` verifies the exported checkpoint and runs the same server defaults:
-
-```bash
-VLLM_JEV_CHECKPOINT="$JEV_CHECKPOINT" bash scripts/serve.sh
-```
-
-Additional vLLM flags pass through the script unchanged, for example `--max-num-seqs 64`.
+Fresh installs stay under `.local/` and are ignored by Git; an existing `runtime/` beside the script is reused. Put downloads on a larger data volume with `VLLM_JEV_HOME=/path/to/data bash scripts/quickstart.sh`. Allow about **30 GB free disk for 2B** or **60 GB for 9B** on a fresh install, including the downloaded base, exported model, runtime and installer cache. Choose a GPU manually with `CUDA_VISIBLE_DEVICES=0`, or restrict automatic selection to an allowed set with `JEV_GPU_POOL=4,5,6,7 bash scripts/quickstart.sh`. Run it inside tmux or a service manager if it should survive a terminal disconnect, then check `curl -f http://127.0.0.1:8795/health`.
 
 ## Try it
 
+The public Open-Jev API shape is available at `/v1/systemone`:
+
 ```bash
-curl -sS http://127.0.0.1:8795/plugins/vllm-jev/choice \
+curl -sS http://127.0.0.1:8795/v1/systemone \
   -H 'Content-Type: application/json' \
-  -d '{"state":"The sky is blue.","question":"What color is the sky?","options":["A. Blue","B. Green","C. Red"]}'
+  -d '{"state":"I was charged twice and want a refund.","questions":{"intent":{"type":"choice","instructions":"Choose the customer intent.","criteria":{"billing":"A payment or refund issue","technical":"A malfunction or setup issue","other":"Another request"}}}}'
 ```
 
-An abridged response from the evaluated checkpoint:
+An abridged response from the released 2B checkpoint:
 
 ```json
 {
-  "choice": "A. Blue",
-  "probabilities": {
-    "A. Blue": 0.9996636611863505,
-    "B. Green": 0.00014645269890626773,
-    "C. Red": 0.0001898861147431309
+  "answers": {
+    "intent": {
+      "type": "choice",
+      "choice": "billing",
+      "probabilities": {
+        "billing": 0.9518019562719459,
+        "technical": 0.004683143491413408,
+        "other": 0.043514900236640744
+      }
+    }
   }
 }
 ```
 
-The full response also includes raw `scores`, `selected_probability`, `confidence`, cached/prompt token counts and timing. Probabilities are normalized **across the options in this request**. `confidence` is a score adjusted above a uniform-choice baseline; it is not a calibrated probability of correctness.
+The same endpoint accepts `choice`, `noul` (yes/no) and `score` (ordinal levels) questions in one request. The simpler `/plugins/vllm-jev/choice` and `/plugins/vllm-jev/batch` routes remain available. Probabilities are normalized over the supplied options; `confidence` is not a calibrated probability of correctness. The public profiles apply their published calibration temperatures by default.
 
 ## How it works
 
 ```text
-question + options
-   → one prompt and one scalar classifier score per option
-   → softmax across those scores
-   → choice + probabilities
+state + question + candidates
+  → one Qwen3.5 pooling score per candidate
+  → per-question calibrated softmax
+  → typed answer and probabilities
 ```
 
-Candidates in one decision share a cache salt so vLLM can reuse their common prefix; separate decisions receive fresh salts by default. `/plugins/vllm-jev/batch` accepts multiple decisions. Native vLLM `/classify`, `/pooling`, `/v1/models` and `/metrics` remain available.
+The small model and endpoint plugins use vLLM for scheduling, batching, compilation and KV-cache management. Candidates in one decision share a cache salt for prefix reuse. The trained LoRA and scalar head are merged once at export; serving does not train. Native vLLM `/classify`, `/pooling`, `/v1/models` and `/metrics` remain available.
 
-For API fields, multi-GPU behavior, tuning and measured limitations, see the [integration guide](docs/guide.md). The example server binds to loopback; add an authenticating proxy before exposing it to a network.
+Public [Laya](https://github.com/NandhaKishorM/laya) and [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev) are active Jev-style projects, but use different model/readout designs; their checkpoints cannot be loaded as this Qwen3.5 scalar-head plugin. The one-command profiles intentionally target the released Open-Jev 2B/9B artifacts that match this architecture. For manual checkpoint export, CLI options, multi-GPU behavior and validation limits, see the [integration guide](docs/guide.md).
 
 ## License
 
-Apache-2.0. The Choice prompt contract follows MIT-licensed [Open-Jev](https://github.com/Zefan-Cai/Open-Jev). See [third-party notices](THIRD_PARTY_NOTICES.md).
+Code: Apache-2.0. The Choice prompt contract follows MIT-licensed [Open-Jev](https://github.com/Zefan-Cai/Open-Jev); its released 2B/9B adapter weights are Apache-2.0. See [third-party notices](THIRD_PARTY_NOTICES.md). The example server binds to loopback; add authentication before network exposure.

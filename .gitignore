@@ -6,8 +6,11 @@ dist/
 .pytest_cache/
 .venv/
 .cache/
+.local/
 checkpoints/
 checkpoint/
+public/
+bootstrap/
 runtime/
 .tmp/
 benchmarks/

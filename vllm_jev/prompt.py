@@ -5,15 +5,15 @@ import math
 from collections.abc import Mapping, Sequence
 
 
-def _render(value):
+def render_value(value):
     return value if isinstance(value, str) else json.dumps(
         value, ensure_ascii=False, sort_keys=True, allow_nan=False
     )
 
 
 def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
-    if not isinstance(state, (str, dict, list)) or not state:
-        raise ValueError("state must be nonempty text or JSON-compatible object")
+    if not isinstance(state, (str, dict, list)):
+        raise ValueError("state must be text or a JSON-compatible object")
     if not isinstance(question, str) or not question.strip():
         raise ValueError("question must be nonempty text")
     if not 2 <= len(options) <= 255:
@@ -22,10 +22,10 @@ def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
         raise ValueError("every candidate must be nonempty text")
     if len(set(options)) != len(options):
         raise ValueError("candidates must be distinct")
-    prefix = f"Context:\n{_render(state)}\n\nQuestion: {_render(question)}\n"
+    prefix = f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
     return [
         prefix
-        + f"Proposed answer: {_render(option)}\n"
+        + f"Proposed answer: {render_value(option)}\n"
         + "Is this proposed answer correct? Answer Yes or No."
         for option in options
     ]

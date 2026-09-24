@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from safetensors import safe_open
@@ -28,13 +29,16 @@ def verify(path: Path, *, full: bool = True) -> dict:
     config=json.loads((path/"config.json").read_text())
     if config.get("architectures")!=[ARCHITECTURE] or config.get("num_labels")!=1:
         raise ValueError("classifier config mismatch")
+    hidden_size=config.get("hidden_size")
+    if not isinstance(hidden_size,int) or hidden_size<=0:
+        raise ValueError("invalid hidden size")
     index=json.loads((path/"model.safetensors.index.json").read_text())
     if index["weight_map"].get("score.weight")!="score.safetensors":
         raise ValueError("score weight not indexed")
     if index["weight_map"].get("score.bias")!="score.safetensors":
         raise ValueError("score bias not indexed")
     with safe_open(path/"score.safetensors",framework="pt",device="cpu") as file:
-        if file.get_tensor("score.weight").shape!=(1,2560):
+        if file.get_tensor("score.weight").shape!=(1,hidden_size):
             raise ValueError("invalid score head shape")
         if file.get_tensor("score.bias").shape!=(1,):
             raise ValueError("invalid score bias shape")
@@ -48,6 +52,9 @@ def verify(path: Path, *, full: bool = True) -> dict:
             raise FileNotFoundError(item)
         if sha256(item)!=manifest["files"][name]:
             raise ValueError(f"checkpoint checksum mismatch: {name}")
+    temperature=manifest.get("calibration_temperature",1.0)
+    if not isinstance(temperature,(int,float)) or not math.isfinite(temperature) or temperature<=0:
+        raise ValueError("invalid calibration temperature")
     return {"format":manifest["format"],"architecture":ARCHITECTURE,
             "foundation_revision":manifest["foundation_revision"],
             "checked_files":len(names),"full":full}

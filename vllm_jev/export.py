@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 
@@ -33,8 +34,8 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
 
     config = AutoConfig.from_pretrained(base, local_files_only=True).get_text_config()
-    if config.hidden_size != 2560 or config.vocab_size != 248320:
-        raise ValueError("this pinned export recipe expects Qwen3.5-4B text dimensions")
+    if config.model_type != "qwen3_5_text" or config.hidden_size <= 0:
+        raise ValueError("this export recipe requires a Qwen3.5 text backbone")
     model = Qwen3_5ForCausalLM.from_pretrained(
         base, config=config, dtype=torch.bfloat16,
         device_map={"": "cuda:0"}, local_files_only=True,
@@ -59,31 +60,52 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     if not torch.isfinite(weight).all() or not torch.isfinite(bias).all():
         raise ValueError("nonfinite score head")
 
+    tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True)
+    if not tokenizer.chat_template:
+        raise ValueError("base snapshot is missing its chat template; download the complete tokenizer")
     model.save_pretrained(output, safe_serialization=True, max_shard_size="4GB")
-    AutoTokenizer.from_pretrained(base, local_files_only=True).save_pretrained(output)
+    tokenizer.save_pretrained(output)
 
     # vLLM's Qwen3_5ForCausalLM expects ``model.layers.*`` while the HF
     # Qwen3_5ForCausalLM wrapper saves ``model.language_model.layers.*``.
     # Rewrite keys, retaining the exact tensor values and dtypes.
     index_path = output / "model.safetensors.index.json"
-    if not index_path.exists():
-        raise FileNotFoundError("expected sharded text checkpoint index")
-    index = json.loads(index_path.read_text())
+    if index_path.exists():
+        index = json.loads(index_path.read_text())
+    else:
+        # Smaller Qwen3.5 checkpoints may fit in one safetensors file.
+        single = output / "model.safetensors"
+        if not single.exists():
+            raise FileNotFoundError("expected a safetensors checkpoint")
+        with safe_open(single, framework="pt", device="cpu") as file:
+            names = list(file.keys())
+            total_size = sum(file.get_tensor(name).numel() *
+                             file.get_tensor(name).element_size() for name in names)
+        index = {"metadata": {"total_size": total_size},
+                 "weight_map": {name: single.name for name in names}}
     old_prefix = "model.language_model."
     new_prefix = "model."
     weight_map = index["weight_map"]
-    if not all(name.startswith(old_prefix) for name in weight_map):
+    if not all(name.startswith(old_prefix) or name == "lm_head.weight"
+               for name in weight_map):
         raise ValueError("unexpected HF text checkpoint weight names")
+    rewritten_total_size = 0
     for filename in sorted(set(weight_map.values())):
         shard_path = output / filename
         with safe_open(shard_path, framework="pt", device="cpu") as file:
             tensors = {new_prefix + name.removeprefix(old_prefix): file.get_tensor(name)
-                       for name in file.keys()}
-        temporary = shard_path.with_suffix(".tmp.safetensors")
-        save_file(tensors, temporary)
-        os.replace(temporary, shard_path)
+                       for name in file.keys() if name.startswith(old_prefix)}
+        if tensors:
+            rewritten_total_size += sum(tensor.numel() * tensor.element_size()
+                                        for tensor in tensors.values())
+            temporary = shard_path.with_suffix(".tmp.safetensors")
+            save_file(tensors, temporary)
+            os.replace(temporary, shard_path)
+        else:
+            shard_path.unlink()
     index["weight_map"] = {new_prefix + name.removeprefix(old_prefix): filename
-                           for name, filename in weight_map.items()}
+                           for name, filename in weight_map.items()
+                           if name.startswith(old_prefix)}
 
     score_path = output / "score.safetensors"
     save_file({"score.weight": weight, "score.bias": bias}, score_path)
@@ -91,7 +113,9 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
         raise ValueError("export already contains a score head")
     index["weight_map"].update({"score.weight": score_path.name,
                                 "score.bias": score_path.name})
-    index["metadata"]["total_size"] += weight.numel() * weight.element_size() + bias.numel() * bias.element_size()
+    index["metadata"]["total_size"] = (rewritten_total_size +
+                                         weight.numel() * weight.element_size() +
+                                         bias.numel() * bias.element_size())
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
 
     config_path = output / "config.json"
@@ -101,6 +125,13 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     saved_config["id2label"] = {"0": "jev_score"}
     saved_config["label2id"] = {"jev_score": 0}
     config_path.write_text(json.dumps(saved_config, indent=2, sort_keys=True) + "\n")
+
+    calibration_path = head_path.with_name("temperature.json")
+    calibration_temperature = None
+    if calibration_path.is_file():
+        calibration_temperature = float(json.loads(calibration_path.read_text())["temperature"])
+        if not math.isfinite(calibration_temperature) or calibration_temperature <= 0:
+            raise ValueError("invalid calibration temperature")
 
     manifest = {
         "format": "vllm-jev-pooling-v1",
@@ -116,6 +147,9 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
         "score_semantics": "final hidden scalar; candidate softmax after all candidates; no token generation",
         "files": {p.name: sha256(p) for p in output.iterdir() if p.is_file()},
     }
+    if calibration_temperature is not None:
+        manifest["calibration_temperature"] = calibration_temperature
+        manifest["source_temperature_sha256"] = sha256(calibration_path)
     (output / "jev_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 

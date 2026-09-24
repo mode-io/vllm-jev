@@ -46,6 +46,11 @@ if [[ "${VLLM_JEV_ASYNC:-1}" == 1 ]]; then
   extra+=(--async-scheduling)
 fi
 
+# These are launcher settings, not vLLM environment variables.
+unset VLLM_JEV_HOME VLLM_JEV_WORKSPACE VLLM_JEV_RUNTIME VLLM_JEV_CHECKPOINT
+unset VLLM_JEV_PORT VLLM_JEV_KV_BYTES VLLM_JEV_GPU_MEMORY_UTILIZATION
+unset VLLM_JEV_VERIFY_QUICK VLLM_JEV_EAGER VLLM_JEV_ASYNC
+
 exec "$runtime/bin/vllm" serve "$checkpoint" \
   --runner pooling --convert none --max-model-len 4096 \
   --enable-prefix-caching --mamba-cache-mode align \
