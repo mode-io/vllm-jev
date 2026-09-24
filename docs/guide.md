@@ -11,14 +11,16 @@ Choose one of the released Open-Jev profiles:
 | `2b` | [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Qwen3.5-2B | 3.6 GB |
 | `9b` | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Qwen3.5-9B | 15 GB |
 
+Follow the three setup commands in the [Quick start](../README.md#quick-start), or run them together after installing uv:
+
 ```bash
-bash scripts/quickstart.sh       # 2B
-bash scripts/quickstart.sh 9b    # 9B
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh       # 2B
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh 9b    # 9B
 ```
 
-The script installs a pinned runtime, downloads the base model and released LoRA/score head, exports a vLLM checkpoint, then runs `vllm serve`. It verifies the release hashes before export. Files are saved under `.local/` by default. Set `VLLM_JEV_HOME` to use another directory.
+The script calls `install_runtime.sh`, prepares the public checkpoint, and calls `serve.sh`. The installer adds this plugin to the runtime. The downloader verifies the released files before export. Files are saved under `.local/` by default. Set `VLLM_JEV_HOME=/path/to/storage` before `quickstart.sh` to move the runtime, cache, and checkpoint together. For manual steps, use that path in place of `.local/`.
 
-The released calibration temperature is loaded with each profile. A direct Choice request can override it. To restrict GPU selection, set `JEV_GPU_POOL=0,1`; to select one device, set `CUDA_VISIBLE_DEVICES=0`.
+Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded with each profile; a direct Choice request can override it.
 
 ### Export another Open-Jev checkpoint
 
@@ -106,7 +108,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
   --served-model-name vllm-jev --host 127.0.0.1 --port 8795
 ```
 
-`scripts/serve.sh` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. Set `VLLM_JEV_WORKSPACE=.local` and `VLLM_JEV_CHECKPOINT` to the exported directory before using it directly. If you chose another workspace with `VLLM_JEV_HOME`, use its `runtime/bin` in these commands.
+`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 bash scripts/serve.sh .local/checkpoint/open-jev-2b --port 9000` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
 
 Use native vLLM options to tune the server:
 
