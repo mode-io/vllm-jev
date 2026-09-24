@@ -6,9 +6,9 @@ This guide documents the **vLLM 0.29.0** plugin and its verified behavior. It fo
 
 `bash scripts/quickstart.sh` selects the public Open-Jev 2B profile; `bash scripts/quickstart.sh 9b` selects 9B. Both profiles pin the released adapter repository and exact upstream Qwen revision in [`vllm_jev.public_models`](../vllm_jev/public_models.py). The script bootstraps `uv`, installs the isolated runtime and plugin, downloads the public LoRA/head and base model, exports a merged checkpoint, verifies its checksums and executes `vllm serve`. Downloads and exported weights stay outside Git under `.local/` or `VLLM_JEV_HOME`.
 
-Set `JEV_GPU_POOL=4,5,6,7` to limit automatic GPU selection, or use `CUDA_VISIBLE_DEVICES` to choose one explicitly. The downloader uses public Hugging Face repositories without sending an implicit access token. The repository revisions and released file hashes are pinned and checked before export.
+Set `JEV_GPU_POOL=0,1` to limit automatic GPU selection, or use `CUDA_VISIBLE_DEVICES` to choose one explicitly. The downloader uses public Hugging Face repositories without sending an implicit access token. The repository revisions and released file hashes are pinned and checked before export.
 
-| Profile | Public release | Base model | Saved temperature | Exported model size in the A800 validation |
+| Profile | Public release | Base model | Saved temperature | Approximate exported size |
 |---|---|---|---:|---:|
 | `2b` | [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Qwen3.5-2B | 1.518796342858676 | 3.6 GB |
 | `9b` | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Qwen3.5-9B | 1.8969118766347646 | 15 GB |
@@ -117,21 +117,11 @@ The corresponding definitions are in the official [engine arguments](https://doc
 
 ## Multiple GPUs
 
-The 4B model fits on one A800. For independent decisions, one model replica per GPU avoids sharding this small model. Start each replica on a different GPU and port, then point `scripts/router.py` at both ports. The router keeps the **whole Choice request** on one replica, so its candidate branches can share prefix cache. It is optional for a single GPU.
-
-Native `vllm serve --data-parallel-size 2` also starts and serves this plugin. Its internal load balancing routes individual pooling calls rather than whole Jev decisions; candidate branches may land on different ranks. On a fixed 128-question long-context test at concurrency 16, native DP measured **12.27 decisions/s and 42.2% cached tokens**; two independent replicas with decision-level routing measured **19.80 decisions/s and 64.4% cached tokens**. These were separate runs, so the observed cache difference is consistent with the routing mechanism but does not prove it explains the entire throughput gap. The official [data-parallel guide](https://docs.vllm.ai/en/v0.29.0/serving/data_parallel_deployment/) describes vLLM's internal balancing.
+Use vLLM's native [data parallel deployment](https://docs.vllm.ai/en/v0.29.0/serving/data_parallel_deployment/) for multiple independent replicas, or tensor parallelism when a model does not fit on one GPU. The endpoint submits one pooling request per candidate, so native data parallelism may send candidates from one decision to different ranks; prefix-cache reuse across those ranks is not guaranteed.
 
 ## Validation and boundaries
 
-In an earlier full 14,042-item MMLU audit of a separately trained Qwen3.5-4B checkpoint, the compiled+async Jev vLLM path answered **10,793/14,042 (76.862%)** correctly, compared with **10,794/14,042 (76.869%)** for its original scorer. Loaded-model wall time was 1,060 s versus 2,873 s in separate A800 runs, an observed 2.71× rate ratio rather than a controlled simultaneous service comparison. These figures do **not** describe the public 2B/9B checkpoints. Per-choice scores are not bitwise identical across implementations or scheduler modes.
-
-Local-only load tests covered 40 combinations of prompt length, 2–32 options and 1–32 client concurrency: **2,560/2,560** requests passed transport and probability-structure checks. A five-minute mixed-option soak completed **1,829** decisions with zero errors and zero KV preemptions; it does not establish multi-day reliability. Details and raw workload IDs are intentionally excluded from this source repository.
-
-Candidate counts above four in the load tests used synthetic distractors; those runs measure throughput and response integrity, not benchmark accuracy.
-
-Both one-command public profiles started on A800 GPUs and passed Choice/Noul/Score checks with the temperatures published in their model cards. On a fixed local set of 64 long four-option questions at client concurrency 4, the 2B service processed **18.50 decisions/s** and the 9B service **5.90 decisions/s**, each with zero transport/response errors. Those throughput runs reserved 4 GiB KV cache explicitly; the default one-command launch instead uses 90% GPU memory planning. They are different models on separate runs, not a quality comparison. One prompt scored with the original HF/PEFT path and the vLLM export selected the same candidate for each public profile; the largest candidate-probability difference was **0.00195 for 2B** and **0.00078 for 9B**. These single-prompt checks are not full parity audits.
-
-A fresh-runtime 2B launch with 90% memory planning reached `/health=200`, passed eight System One schema/boundary checks and completed **64/64** short, three-question System One requests at concurrency 8 with zero errors. That small synthetic load reached 60.41 requests/s and 141 ms p95; it is not a long-context or accuracy benchmark.
+Both public profiles have started with the pinned runtime and passed Choice/Noul/Score response checks. A single prompt per profile matched the original HF/PEFT implementation's selected candidate; the largest candidate-probability difference was **0.00195 for 2B** and **0.00078 for 9B**. These spot checks do not establish full numerical or benchmark parity. Load tests exercised varied prompt lengths, option counts and concurrency without response errors, but they do not establish long-running reliability. Raw workload scripts and machine-specific measurements are kept outside the source repository.
 
 The one-command profiles support the publicly released 2B/9B scalar-head Open-Jev family. Other popular Jev-style projects require different adapters:
 
@@ -151,6 +141,6 @@ Generation-token features such as streaming text, speculative decoding, tool cal
 
 ## Upstream boundary and security
 
-A reviewable upstream change would retain the model registry entry, scalar pooling adapter, prompt/normalization code and opt-in endpoint plugin. vLLM's public pooling `EngineClient.encode` in this pinned version does not expose a DP-rank affinity parameter. Adding that option would let all candidates of a Jev decision share one native DP rank without an external router; this repository does not patch private engine internals.
+A reviewable upstream change would retain the model registry entry, scalar pooling adapter, prompt/normalization code and opt-in endpoint plugin. vLLM's public pooling `EngineClient.encode` in this pinned version does not expose a DP-rank affinity parameter. Adding that option could keep candidates of one decision on a common data-parallel rank; this repository does not patch private engine internals.
 
 The example server binds to `127.0.0.1`. Neither the custom route nor all native pooling routes should be assumed protected by `--api-key`; place an authenticating, allowlisted reverse proxy in front of any network-exposed deployment. See vLLM's [security guidance](https://docs.vllm.ai/en/v0.29.0/usage/security/). Model weights, adapters, raw benchmarks, stress scripts, credentials and machine-specific paths stay outside the repository.

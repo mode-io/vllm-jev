@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 workspace="${VLLM_JEV_WORKSPACE:-$repo_root}"
 runtime="${VLLM_JEV_RUNTIME:-$workspace/runtime}"
-checkpoint="${VLLM_JEV_CHECKPOINT:-$workspace/checkpoint/qwen35_4b_jev_pooling_v3}"
+checkpoint="${VLLM_JEV_CHECKPOINT:?Set VLLM_JEV_CHECKPOINT to an exported model directory}"
 port="${VLLM_JEV_PORT:-8795}"
 kv_bytes="${VLLM_JEV_KV_BYTES:-auto}"
 gpu_memory_utilization="${VLLM_JEV_GPU_MEMORY_UTILIZATION:-0.9}"

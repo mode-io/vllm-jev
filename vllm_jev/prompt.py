@@ -2,7 +2,7 @@
 
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
 
 def render_value(value):
@@ -28,18 +28,6 @@ def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
         + f"Proposed answer: {render_value(option)}\n"
         + "Is this proposed answer correct? Answer Yes or No."
         for option in options
-    ]
-
-
-def chat_prompts(tokenizer, state, question, options: Sequence[str]) -> list[str]:
-    return [
-        tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}],
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        for prompt in candidate_prompts(state, question, options)
     ]
 
 

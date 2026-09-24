@@ -1,7 +1,6 @@
 """Compile an Open-Jev LoRA/head checkpoint into a native vLLM pooling model."""
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -14,14 +13,7 @@ from safetensors.torch import save_file
 from transformers import AutoConfig, AutoTokenizer, Qwen3_5ForCausalLM
 
 from .model import ARCHITECTURE
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+from .checkpoint import sha256
 
 
 def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
