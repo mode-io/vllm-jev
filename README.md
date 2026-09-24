@@ -32,15 +32,16 @@ bash scripts/install_runtime.sh .local
 
 # Download and prepare the public Open-Jev-2B model.
 HF_HOME="$PWD/.local/.cache" \
-  .local/runtime/bin/python -m vllm_jev.public_models 2b --workspace .local
+  .local/runtime/bin/python -m vllm_jev.public_models ZefanCai/Open-Jev-2B --workspace .local
 
 # Start the server on GPU 0.
-bash scripts/serve.sh .local/checkpoint/open-jev-2b
+VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
+  bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B
 ```
 
 The server listens at `http://127.0.0.1:8795`. Check it with `curl -f http://127.0.0.1:8795/health`.
 
-For [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B), use `9b` in the download command and `open-jev-9b` in the server command. To combine all three steps, run `CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh 2b` or `CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh 9b`. Downloads are reused on later runs.
+For [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B), replace `ZefanCai/Open-Jev-2B` with `ZefanCai/Open-Jev-9B`. To combine all three steps, run `CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B` (or `ZefanCai/Open-Jev-9B`). Downloads are reused on later runs.
 
 ## Example
 

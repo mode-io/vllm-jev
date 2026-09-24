@@ -42,13 +42,23 @@ RELEASE_HASHES = {
 }
 
 
+def resolve_profile(name: str) -> str:
+    for profile, (model_id, *_rest) in PROFILES.items():
+        if name in (profile, model_id):
+            return profile
+    raise ValueError(f"unknown public model: {name}")
+
+
 def prepare(profile: str, workspace: Path) -> Path:
-    if profile not in PROFILES:
-        raise ValueError(f"unknown public model: {profile}")
+    profile = resolve_profile(profile)
     adapter_id, adapter_revision, base_id, base_revision = PROFILES[profile]
     adapter_hash, head_hash, temperature_hash = RELEASE_HASHES[profile]
     workspace = workspace.resolve()
-    output = workspace / "checkpoint" / f"open-jev-{profile}"
+    output = workspace / "checkpoint" / adapter_id
+    legacy_output = workspace / "checkpoint" / f"open-jev-{profile}"
+    using_legacy = not output.exists() and legacy_output.is_dir()
+    if using_legacy:
+        output = legacy_output
     if output.exists():
         verify(output, full=True)
         manifest = json.loads((output / "jev_manifest.json").read_text())
@@ -57,12 +67,17 @@ def prepare(profile: str, workspace: Path) -> Path:
             manifest.get("head_sha256") != head_hash or
             manifest.get("source_temperature_sha256") != temperature_hash):
             raise ValueError("existing checkpoint does not match the public release")
+        if using_legacy:
+            canonical = workspace / "checkpoint" / adapter_id
+            canonical.parent.mkdir(parents=True, exist_ok=True)
+            canonical.symlink_to(output, target_is_directory=True)
+            return canonical
         return output
 
     package = Path(snapshot_download(
         repo_id=adapter_id,
         revision=adapter_revision,
-        local_dir=workspace / "public" / f"open-jev-{profile}",
+        local_dir=workspace / "public" / adapter_id,
         allow_patterns=["package/checkpoint/*", "release-manifest.json",
                         "LICENSE", "UPSTREAM.md"],
         token=False,
@@ -98,7 +113,9 @@ def prepare(profile: str, workspace: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("profile", choices=sorted(PROFILES))
+    parser.add_argument(
+        "profile", choices=sorted([*PROFILES, *(p[0] for p in PROFILES.values())])
+    )
     parser.add_argument("--workspace", type=Path, required=True)
     args = parser.parse_args()
     print("JEV_CHECKPOINT_READY", prepare(args.profile, args.workspace), flush=True)

@@ -6,19 +6,19 @@ This guide covers public model setup, the HTTP API, and vLLM serving options. St
 
 Choose one of the released Open-Jev profiles:
 
-| Profile | Release | Base | Approximate exported size |
-|---|---|---|---:|
-| `2b` | [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Qwen3.5-2B | 3.6 GB |
-| `9b` | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Qwen3.5-9B | 15 GB |
+| Model ID | Base | Approximate exported size |
+|---|---|---:|
+| [`ZefanCai/Open-Jev-2B`](https://huggingface.co/ZefanCai/Open-Jev-2B) | Qwen3.5-2B | 3.6 GB |
+| [`ZefanCai/Open-Jev-9B`](https://huggingface.co/ZefanCai/Open-Jev-9B) | Qwen3.5-9B | 15 GB |
 
 Follow the three setup commands in the [Quick start](../README.md#quick-start), or run them together after installing uv:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh       # 2B
-CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh 9b    # 9B
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-9B
 ```
 
-The script calls `install_runtime.sh`, prepares the public checkpoint, and calls `serve.sh`. The installer adds this plugin to the runtime. The downloader verifies the released files before export. Files are saved under `.local/` by default. Set `VLLM_JEV_HOME=/path/to/storage` before `quickstart.sh` to move the runtime, cache, and checkpoint together. For manual steps, use that path in place of `.local/`.
+The script calls `install_runtime.sh`, prepares the public checkpoint, and calls `serve.sh`. The installer adds this plugin to the runtime. The downloader verifies the released files before export. Files are saved under `.local/` by default. Set `VLLM_JEV_HOME=/path/to/storage` before `quickstart.sh` to move the runtime, cache, and checkpoint together. Checkpoints use `checkpoint/ZefanCai/Open-Jev-2B` or `checkpoint/ZefanCai/Open-Jev-9B`. An existing `open-jev-2b` or `open-jev-9b` directory is reused through a link at the new path. The shorter `2b` and `9b` inputs remain accepted.
 
 Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded with each profile; a direct Choice request can override it.
 
@@ -105,10 +105,10 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
   --enable-prefix-caching --mamba-cache-mode align \
   --mamba-ssm-cache-dtype float32 --async-scheduling \
   --gpu-memory-utilization 0.90 \
-  --served-model-name vllm-jev --host 127.0.0.1 --port 8795
+  --served-model-name ZefanCai/Open-Jev-2B --host 127.0.0.1 --port 8795
 ```
 
-`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 bash scripts/serve.sh .local/checkpoint/open-jev-2b --port 9000` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
+`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. Set `VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B` to use the Hugging Face ID in `/v1/models` and System One responses. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B --port 9000` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
 
 Use native vLLM options to tune the server:
 

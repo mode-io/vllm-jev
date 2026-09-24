@@ -18,4 +18,4 @@ exec "$workspace/runtime/bin/vllm" serve "$checkpoint" \
   --mamba-ssm-cache-dtype float32 --async-scheduling \
   --gpu-memory-utilization 0.9 \
   --host 127.0.0.1 --port 8795 \
-  --served-model-name vllm-jev "$@"
+  --served-model-name "${VLLM_JEV_MODEL_ID:-vllm-jev}" "$@"

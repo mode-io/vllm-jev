@@ -50,11 +50,12 @@ async def _gather_cancel_on_error(coroutines):
 
 class _JevService:
     def __init__(self, engine_client, tokenizer, max_inflight: int = 128,
-                 default_temperature: float = 1.0):
+                 default_temperature: float = 1.0, model_id: str = "vllm-jev"):
         self.engine_client = engine_client
         self.tokenizer = tokenizer
         self.semaphore = asyncio.Semaphore(max_inflight)
         self.default_temperature = default_temperature
+        self.model_id = model_id
 
     async def _one_score(
         self, prompt: str, cache_salt: str, use_prefix_cache: bool, priority: int
@@ -149,7 +150,8 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
             raise ValueError("instructions and descriptions must be text or JSON")
         return render_value(value)
 
-    if payload.model not in (None, "open-jev", "jev-latest", "vllm-jev"):
+    if payload.model not in (None, "open-jev", "jev-latest", "vllm-jev",
+                             service.model_id):
         raise ValueError("requested model is not loaded")
     if not isinstance(payload.state, (str, dict, list)):
         raise ValueError("state must be text or JSON")
@@ -230,7 +232,7 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
     started = time.perf_counter()
     values = await _gather_cancel_on_error(answer(item) for item in prepared)
     return {"answers": {identifier: value for identifier, value, _, _ in values},
-            "model": "vllm-jev",
+            "model": service.model_id,
             "usage": {"input_tokens": sum(tokens for _, _, _, tokens in values),
                       "output_tokens": 0},
             "metadata": {"method": "lora_decision_head",
@@ -304,7 +306,11 @@ class JevEndpointPlugin:
             default_temperature
         ) or default_temperature <= 0:
             raise ValueError("invalid Jev calibration temperature")
+        model_id = getattr(args, "served_model_name", None)
+        if isinstance(model_id, list):
+            model_id = model_id[0] if model_id else None
         state.vllm_jev_service = _JevService(
             engine_client, engine_client.get_tokenizer(), max_inflight,
             float(default_temperature),
+            model_id if isinstance(model_id, str) and model_id else "vllm-jev",
         )
