@@ -21,33 +21,19 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 
 ## Getting Started
 
-On Linux with an NVIDIA GPU, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run these commands from the repository directory:
+Install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
 
 ```bash
-# Use the same GPU to prepare and serve the model.
-export CUDA_VISIBLE_DEVICES=0
-
-# Install vLLM and the plugin in .local/runtime.
-bash scripts/install_runtime.sh .local
-
-# Download and prepare the public Open-Jev-2B model.
-HF_HOME="$PWD/.local/.cache" \
-  .local/runtime/bin/python -m vllm_jev.native_models ZefanCai/Open-Jev-2B --workspace .local
-
-# Start the server on GPU 0.
-VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
-  bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B
+uv pip install .
 ```
 
-The server listens at `http://127.0.0.1:8795`. Check it with `curl -f http://127.0.0.1:8795/health`.
+For development, use an [editable installation](docs/guide.md#installation).
 
-For another supported model, replace the Hugging Face ID in the download command, `VLLM_JEV_MODEL_ID`, and checkpoint path. The automatic launcher combines all three steps:
+Visit our [documentation](docs/guide.md) to learn more.
 
-```bash
-CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh IamBusy/OpenJev-0.6B
-```
-
-It also supports `ZefanCai/Open-Jev-2B`, `ZefanCai/Open-Jev-9B`, and `lostargon/Tiny-Jev`. Downloads are reused on later runs. See the [integration guide](docs/guide.md) for the protocol table and optional `--protocol` override.
+- [Installation](docs/guide.md#installation)
+- [Quickstart](docs/guide.md#quickstart)
+- [List of Supported Models](docs/guide.md#supported-models)
 
 ## Example
 
