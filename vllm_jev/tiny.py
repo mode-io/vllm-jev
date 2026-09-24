@@ -16,32 +16,44 @@ def export_tiny(source: Path, output: Path, model_id: str, revision: str) -> dic
     if any(output.iterdir()):
         raise FileExistsError(output)
     config = json.loads((source / "config.json").read_text())
-    if (config.get("model_type") != "tiny_jev" or
-        config.get("architectures") != ["TinyJevModel"] or
-        not isinstance(config.get("hidden_size"), int)):
+    if (
+        config.get("model_type") != "tiny_jev"
+        or config.get("architectures") != ["TinyJevModel"]
+        or not isinstance(config.get("hidden_size"), int)
+    ):
         raise ValueError("not a Tiny-Jev Qwen3 checkpoint")
 
     with safe_open(source / "model.safetensors", framework="pt", device="cpu") as file:
         names = list(file.keys())
         if any(not name.startswith(("model.", "head.")) for name in names):
             raise ValueError("unexpected Tiny-Jev tensor names")
-        tensors = {name: file.get_tensor(name) for name in names
-                   if name.startswith("model.")}
-        head = {name.removeprefix("head."): file.get_tensor(name)
-                for name in names if name.startswith("head.")}
+        tensors = {
+            name: file.get_tensor(name) for name in names if name.startswith("model.")
+        }
+        head = {
+            name.removeprefix("head."): file.get_tensor(name)
+            for name in names
+            if name.startswith("head.")
+        }
     if head["weight"].shape != (1, config["hidden_size"]) or head["bias"].shape != (1,):
         raise ValueError("invalid Tiny-Jev decision head")
     save_file(tensors, output / "model.safetensors")
     save_file(head, output / "score.safetensors")
-    index = {"metadata": {"total_size": sum(t.numel() * t.element_size()
-                                             for t in tensors.values())},
-             "weight_map": {name: "model.safetensors" for name in tensors}}
+    index = {
+        "metadata": {
+            "total_size": sum(t.numel() * t.element_size() for t in tensors.values())
+        },
+        "weight_map": {name: "model.safetensors" for name in tensors},
+    }
     (output / "model.safetensors.index.json").write_text(
-        json.dumps(index, indent=2, sort_keys=True) + "\n")
+        json.dumps(index, indent=2, sort_keys=True) + "\n"
+    )
     config.pop("auto_map", None)
     config["model_type"] = "qwen3"
     config["architectures"] = [QWEN3_TOKEN_ARCHITECTURE]
-    (output / "config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+    (output / "config.json").write_text(
+        json.dumps(config, indent=2, sort_keys=True) + "\n"
+    )
     for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
         if (source / name).is_file():
             (output / name).write_bytes((source / name).read_bytes())
@@ -54,7 +66,9 @@ def export_tiny(source: Path, output: Path, model_id: str, revision: str) -> dic
         "source_weights_sha256": sha256(source / "model.safetensors"),
         "calibration_temperature": float(config["temperature"]),
         "foundation_revision": revision,
-        "files": {path.name: sha256(path) for path in output.iterdir() if path.is_file()},
+        "files": {
+            path.name: sha256(path) for path in output.iterdir() if path.is_file()
+        },
     }
     (output / "jev_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest

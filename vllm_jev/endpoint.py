@@ -14,8 +14,13 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 from vllm import PoolingParams
 
-from .prompt import (branch_token_ids, candidate_prompts, choice_result,
-                     render_value, tiny_token_ids)
+from .prompt import (
+    branch_token_ids,
+    candidate_prompts,
+    choice_result,
+    render_value,
+    tiny_token_ids,
+)
 
 
 class ChoiceRequest(BaseModel):
@@ -50,37 +55,50 @@ async def _gather_cancel_on_error(coroutines):
 
 
 class _JevService:
-    def __init__(self, engine_client, tokenizer, max_inflight: int = 128,
-                 default_temperature: float = 1.0, model_id: str = "vllm-jev",
-                 protocol: str = "open_jev_choice",
-                 temperatures: dict[str, float] | None = None,
-                 head: tuple[Any, Any] | None = None,
-                 marker: tuple[str, str] = (" - correct?", "<opt>")):
+    def __init__(
+        self,
+        engine_client,
+        tokenizer,
+        max_inflight: int = 128,
+        default_temperature: float = 1.0,
+        model_id: str = "vllm-jev",
+        protocol: str = "open_jev_choice",
+        temperatures: dict[str, float] | None = None,
+        head: tuple[Any, Any] | None = None,
+        marker: tuple[str, str] = (" - correct?", "<opt>"),
+    ):
         self.engine_client = engine_client
         self.tokenizer = tokenizer
         self.semaphore = asyncio.Semaphore(max_inflight)
         self.default_temperature = default_temperature
         self.model_id = model_id
         self.protocol = protocol
-        self.temperatures = temperatures or {kind: default_temperature
-                                              for kind in ("choice", "noul", "score")}
+        self.temperatures = temperatures or {
+            kind: default_temperature for kind in ("choice", "noul", "score")
+        }
         self.head = head
         self.marker = marker
 
     async def _one_score(
-        self, prompt: str | list[int], cache_salt: str,
-        use_prefix_cache: bool, priority: int
+        self,
+        prompt: str | list[int],
+        cache_salt: str,
+        use_prefix_cache: bool,
+        priority: int,
     ) -> tuple[float, int, int]:
         request_id = f"jev-{uuid.uuid4().hex}"
         completed = False
         async with self.semaphore:
             try:
                 iterator = self.engine_client.encode(
-                    prompt=({"prompt_token_ids": prompt, "cache_salt": cache_salt}
-                            if isinstance(prompt, list) else
-                            {"prompt": prompt, "cache_salt": cache_salt}),
+                    prompt=(
+                        {"prompt_token_ids": prompt, "cache_salt": cache_salt}
+                        if isinstance(prompt, list)
+                        else {"prompt": prompt, "cache_salt": cache_salt}
+                    ),
                     pooling_params=PoolingParams(
-                        task="classify", use_activation=False,
+                        task="classify",
+                        use_activation=False,
                         skip_reading_prefix_cache=not use_prefix_cache,
                     ),
                     request_id=request_id,
@@ -99,9 +117,14 @@ class _JevService:
                     with suppress(Exception):
                         await self.engine_client.abort(request_id)
 
-    async def _token_scores(self, ids: list[int], positions: list[int],
-                            salt: str, priority: int,
-                            use_prefix_cache: bool) -> tuple[list[float], int, int]:
+    async def _token_scores(
+        self,
+        ids: list[int],
+        positions: list[int],
+        salt: str,
+        priority: int,
+        use_prefix_cache: bool,
+    ) -> tuple[list[float], int, int]:
         import torch
         import torch.nn.functional as functional
 
@@ -111,10 +134,13 @@ class _JevService:
             try:
                 iterator = self.engine_client.encode(
                     prompt={"prompt_token_ids": ids, "cache_salt": salt},
-                    pooling_params=PoolingParams(task="token_embed",
-                                                 use_activation=False,
-                                                 skip_reading_prefix_cache=not use_prefix_cache),
-                    request_id=request_id, priority=priority,
+                    pooling_params=PoolingParams(
+                        task="token_embed",
+                        use_activation=False,
+                        skip_reading_prefix_cache=not use_prefix_cache,
+                    ),
+                    request_id=request_id,
+                    priority=priority,
                 )
                 final = None
                 async for output in iterator:
@@ -123,11 +149,22 @@ class _JevService:
                     raise RuntimeError("vLLM returned no final token embedding")
                 completed = True
                 weight, bias = self.head
-                hidden = torch.as_tensor(final.outputs.data).reshape(-1, weight.shape[1])
+                hidden = torch.as_tensor(final.outputs.data).reshape(
+                    -1, weight.shape[1]
+                )
                 selected = hidden[positions].float()
-                scores = functional.linear(
-                    functional.layer_norm(selected, (weight.shape[1],)).to(weight.dtype),
-                    weight, bias).float().flatten().tolist()
+                scores = (
+                    functional.linear(
+                        functional.layer_norm(selected, (weight.shape[1],)).to(
+                            weight.dtype
+                        ),
+                        weight,
+                        bias,
+                    )
+                    .float()
+                    .flatten()
+                    .tolist()
+                )
                 return scores, int(final.num_cached_tokens), len(final.prompt_token_ids)
             finally:
                 if not completed:
@@ -138,39 +175,59 @@ class _JevService:
         started = time.perf_counter()
         if self.protocol == "tiny_jev_marker":
             ids, positions = tiny_token_ids(
-                self.tokenizer, payload.state, payload.question, payload.options,
-                cue=self.marker[0], opt_token=self.marker[1])
+                self.tokenizer,
+                payload.state,
+                payload.question,
+                payload.options,
+                cue=self.marker[0],
+                opt_token=self.marker[1],
+            )
             prompts = []
         elif self.protocol == "openjev_branch_v03":
             prompts = branch_token_ids(
-                self.tokenizer, payload.state, payload.question, payload.options)
+                self.tokenizer, payload.state, payload.question, payload.options
+            )
         else:
             raw_prompts = candidate_prompts(
-                payload.state, payload.question, payload.options)
-            prompts = [self.tokenizer.apply_chat_template(
-                [{"role": "user", "content": text}], tokenize=False,
-                add_generation_prompt=True, enable_thinking=False,
-            ) for text in raw_prompts]
+                payload.state, payload.question, payload.options
+            )
+            prompts = [
+                self.tokenizer.apply_chat_template(
+                    [{"role": "user", "content": text}],
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
+                )
+                for text in raw_prompts
+            ]
         # A fresh salt isolates unrelated users while preserving reuse among
         # the branches of this single Choice request.
         salt = payload.cache_salt or secrets.token_hex(16)
         rendered = time.perf_counter()
         if self.protocol == "tiny_jev_marker":
             scores, cached, tokens = await self._token_scores(
-                ids, positions, salt, payload.priority, payload.use_prefix_cache)
-            entries = [(score, cached if index == 0 else 0,
-                        tokens if index == 0 else 0)
-                       for index, score in enumerate(scores)]
+                ids, positions, salt, payload.priority, payload.use_prefix_cache
+            )
+            entries = [
+                (score, cached if index == 0 else 0, tokens if index == 0 else 0)
+                for index, score in enumerate(scores)
+            ]
         else:
             entries = await _gather_cancel_on_error(
-                self._one_score(prompt, salt, payload.use_prefix_cache, payload.priority)
+                self._one_score(
+                    prompt, salt, payload.use_prefix_cache, payload.priority
+                )
                 for prompt in prompts
             )
         scored = time.perf_counter()
-        temperature = (payload.temperature if payload.temperature is not None
-                       else self.temperatures[kind])
+        temperature = (
+            payload.temperature
+            if payload.temperature is not None
+            else self.temperatures[kind]
+        )
         result = choice_result(
-            payload.options, [entry[0] for entry in entries],
+            payload.options,
+            [entry[0] for entry in entries],
             temperature,
         )
         finished = time.perf_counter()
@@ -189,17 +246,26 @@ class _JevService:
         )
         return result
 
-    async def noul(self, state: Any, question: str, salt: str) -> tuple[float, int, int]:
-        raw = (f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
-               "Is the answer to this question yes? Answer Yes or No.")
+    async def noul(
+        self, state: Any, question: str, salt: str
+    ) -> tuple[float, int, int]:
+        raw = (
+            f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
+            "Is the answer to this question yes? Answer Yes or No."
+        )
         prompt = self.tokenizer.apply_chat_template(
-            [{"role": "user", "content": raw}], tokenize=False,
-            add_generation_prompt=True, enable_thinking=False,
+            [{"role": "user", "content": raw}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
         )
         score, cached, tokens = await self._one_score(prompt, salt, True, 0)
         scaled = score / self.temperatures["noul"]
-        probability = (1 / (1 + math.exp(-scaled)) if scaled >= 0 else
-                       math.exp(scaled) / (1 + math.exp(scaled)))
+        probability = (
+            1 / (1 + math.exp(-scaled))
+            if scaled >= 0
+            else math.exp(scaled) / (1 + math.exp(scaled))
+        )
         return probability, cached, tokens
 
 
@@ -209,8 +275,13 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
             raise ValueError("instructions and descriptions must be text or JSON")
         return render_value(value)
 
-    if payload.model not in (None, "open-jev", "jev-latest", "vllm-jev",
-                             service.model_id):
+    if payload.model not in (
+        None,
+        "open-jev",
+        "jev-latest",
+        "vllm-jev",
+        service.model_id,
+    ):
         raise ValueError("requested model is not loaded")
     if not isinstance(payload.state, (str, dict, list)):
         raise ValueError("state must be text or JSON")
@@ -233,17 +304,23 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
             keys = list(criteria)
             if any(not isinstance(key, str) or not key for key in keys):
                 raise ValueError("Choice candidate names must be nonempty strings")
-            options = ([describe(value) for value in criteria.values()]
-                       if service.protocol == "openjev_branch_v03" else
-                       [key if value is None else f"{key}: {describe(value)}"
-                        for key, value in criteria.items()])
+            options = (
+                [describe(value) for value in criteria.values()]
+                if service.protocol == "openjev_branch_v03"
+                else [
+                    key if value is None else f"{key}: {describe(value)}"
+                    for key, value in criteria.items()
+                ]
+            )
             candidate_count += len(options)
         elif kind == "score":
             if not isinstance(criteria, list) or not 2 <= len(criteria) <= 10:
                 raise ValueError("Score requires 2 to 10 descriptive levels")
-            keys = ([describe(value) for value in criteria]
-                    if service.protocol == "tiny_jev_marker" else
-                    [str(index) for index in range(len(criteria))])
+            keys = (
+                [describe(value) for value in criteria]
+                if service.protocol == "tiny_jev_marker"
+                else [str(index) for index in range(len(criteria))]
+            )
             options = [describe(value) for value in criteria]
             candidate_count += len(options)
         elif kind == "noul":
@@ -251,14 +328,20 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
                 if not isinstance(criteria, dict) or set(criteria) != {"true", "false"}:
                     raise ValueError("Noul criteria must define true and false")
                 if service.protocol == "open_jev_choice":
-                    question += (f"\nYes means: {describe(criteria['true'])}"
-                                 f"\nNo means: {describe(criteria['false'])}")
+                    question += (
+                        f"\nYes means: {describe(criteria['true'])}"
+                        f"\nNo means: {describe(criteria['false'])}"
+                    )
             keys = []
             if service.protocol == "openjev_branch_v03":
-                options = ([describe(criteria["false"]), describe(criteria["true"])]
-                           if criteria else
-                           [f"The following statement is false: {question}",
-                            f"The following statement is true: {question}"])
+                options = (
+                    [describe(criteria["false"]), describe(criteria["true"])]
+                    if criteria
+                    else [
+                        f"The following statement is false: {question}",
+                        f"The following statement is true: {question}",
+                    ]
+                )
                 candidate_count += 2
             elif service.protocol == "tiny_jev_marker":
                 options = ["no", "yes"]
@@ -276,62 +359,113 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
         identifier, kind, question, criteria, keys, options = item
         if kind == "noul":
             if service.protocol in ("openjev_branch_v03", "tiny_jev_marker"):
-                result = await service.choice(ChoiceRequest(
-                    state=payload.state, question=question, options=options,
-                    cache_salt=salt), kind="noul")
-                return (identifier, {"type": "noul",
-                                     "noul": result["probabilities"][options[1]]},
-                        sum(result["cached_tokens"]), sum(result["prompt_tokens"]))
-            probability, cached, tokens = await service.noul(payload.state, question, salt)
+                result = await service.choice(
+                    ChoiceRequest(
+                        state=payload.state,
+                        question=question,
+                        options=options,
+                        cache_salt=salt,
+                    ),
+                    kind="noul",
+                )
+                return (
+                    identifier,
+                    {"type": "noul", "noul": result["probabilities"][options[1]]},
+                    sum(result["cached_tokens"]),
+                    sum(result["prompt_tokens"]),
+                )
+            probability, cached, tokens = await service.noul(
+                payload.state, question, salt
+            )
             return identifier, {"type": "noul", "noul": probability}, cached, tokens
         if len(options) == 1:
-            return identifier, {"type": "choice", "choice": keys[0],
-                                "probabilities": {keys[0]: 1.0}, "confidence": 1.0}, 0, 0
-        result = await service.choice(ChoiceRequest(
-            state=payload.state, question=question, options=options,
-            cache_salt=salt,
-        ), kind=kind)
-        probabilities = {key: result["probabilities"][option]
-                         for key, option in zip(keys, options)}
+            return (
+                identifier,
+                {
+                    "type": "choice",
+                    "choice": keys[0],
+                    "probabilities": {keys[0]: 1.0},
+                    "confidence": 1.0,
+                },
+                0,
+                0,
+            )
+        result = await service.choice(
+            ChoiceRequest(
+                state=payload.state,
+                question=question,
+                options=options,
+                cache_salt=salt,
+            ),
+            kind=kind,
+        )
+        probabilities = {
+            key: result["probabilities"][option] for key, option in zip(keys, options)
+        }
         if kind == "choice":
             selected = keys[options.index(result["choice"])]
-            answer_value = {"type": kind, "choice": selected,
-                            "probabilities": probabilities,
-                            "confidence": (result["selected_probability"]
-                                           if service.protocol in ("openjev_branch_v03",
-                                                                   "tiny_jev_marker")
-                                           else result["confidence"])}
+            answer_value = {
+                "type": kind,
+                "choice": selected,
+                "probabilities": probabilities,
+                "confidence": (
+                    result["selected_probability"]
+                    if service.protocol in ("openjev_branch_v03", "tiny_jev_marker")
+                    else result["confidence"]
+                ),
+            }
         else:
             mode = max(range(len(keys)), key=lambda i: probabilities[keys[i]])
-            distance = sum(probabilities[key] * abs(i - mode)
-                           for i, key in enumerate(keys))
+            distance = sum(
+                probabilities[key] * abs(i - mode) for i, key in enumerate(keys)
+            )
             center = (len(keys) - 1) / 2
-            uniform_deviation = sum(abs(i - center) for i in range(len(keys))) / len(keys)
-            answer_value = {"type": kind,
-                            "score": sum(i * probabilities[key]
-                                         for i, key in enumerate(keys)),
-                            "probabilities": probabilities,
-                            "confidence": (max(probabilities.values())
-                                           if service.protocol in ("openjev_branch_v03",
-                                                                   "tiny_jev_marker")
-                                           else max(0.0, 1.0 - distance / uniform_deviation)),
-                            "legend": {key: value for key, value in zip(keys, criteria)}}
-        return identifier, answer_value, sum(result["cached_tokens"]), sum(result["prompt_tokens"])
+            uniform_deviation = sum(abs(i - center) for i in range(len(keys))) / len(
+                keys
+            )
+            answer_value = {
+                "type": kind,
+                "score": sum(i * probabilities[key] for i, key in enumerate(keys)),
+                "probabilities": probabilities,
+                "confidence": (
+                    max(probabilities.values())
+                    if service.protocol in ("openjev_branch_v03", "tiny_jev_marker")
+                    else max(0.0, 1.0 - distance / uniform_deviation)
+                ),
+                "legend": {key: value for key, value in zip(keys, criteria)},
+            }
+        return (
+            identifier,
+            answer_value,
+            sum(result["cached_tokens"]),
+            sum(result["prompt_tokens"]),
+        )
 
     started = time.perf_counter()
     values = await _gather_cancel_on_error(answer(item) for item in prepared)
-    return {"answers": {identifier: value for identifier, value, _, _ in values},
-            "model": service.model_id,
-            "usage": {"input_tokens": sum(tokens for _, _, _, tokens in values),
-                      "output_tokens": 0},
-            "metadata": {"method": ("marker_token_head" if service.protocol == "tiny_jev_marker"
-                                    else "lora_decision_head"),
-                         "temperature": (service.temperatures
-                                         if service.protocol == "openjev_branch_v03"
-                                         else service.default_temperature),
-                         "candidate_sequences": candidate_count,
-                         "cached_tokens": sum(cached for _, _, cached, _ in values),
-                         "inference_seconds": time.perf_counter() - started}}
+    return {
+        "answers": {identifier: value for identifier, value, _, _ in values},
+        "model": service.model_id,
+        "usage": {
+            "input_tokens": sum(tokens for _, _, _, tokens in values),
+            "output_tokens": 0,
+        },
+        "metadata": {
+            "method": (
+                "marker_token_head"
+                if service.protocol == "tiny_jev_marker"
+                else "lora_decision_head"
+            ),
+            "temperature": (
+                service.temperatures
+                if service.protocol == "openjev_branch_v03"
+                else service.default_temperature
+            ),
+            "candidate_sequences": candidate_count,
+            "cached_tokens": sum(cached for _, _, cached, _ in values),
+            "inference_seconds": time.perf_counter() - started,
+        },
+    }
 
 
 class JevEndpointPlugin:
@@ -366,10 +500,12 @@ class JevEndpointPlugin:
                 )
             except ValueError as error:
                 raise HTTPException(status_code=422, detail=str(error)) from error
-            return {"results": results,
-                    "batch_wall_seconds": time.perf_counter() - started,
-                    "decision_count": len(results),
-                    "candidate_count": total_candidates}
+            return {
+                "results": results,
+                "batch_wall_seconds": time.perf_counter() - started,
+                "decision_count": len(results),
+                "candidate_count": total_candidates,
+            }
 
         @app.post("/v1/systemone")
         async def system_one(payload: SystemOneRequest, raw_request: Request):
@@ -386,6 +522,7 @@ class JevEndpointPlugin:
             state.vllm_jev_service = None
             return
         import os
+
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
         if max_inflight < 1:
             raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
@@ -400,16 +537,23 @@ class JevEndpointPlugin:
             default_temperature = data.get("calibration_temperature", 1.0)
             protocol = data.get("prompt_protocol", protocol)
             temperatures = data.get("calibration_temperatures")
-        if not isinstance(default_temperature, (int, float)) or not math.isfinite(
-            default_temperature
-        ) or default_temperature <= 0:
+        if (
+            not isinstance(default_temperature, (int, float))
+            or not math.isfinite(default_temperature)
+            or default_temperature <= 0
+        ):
             raise ValueError("invalid Jev calibration temperature")
         if protocol not in ("open_jev_choice", "openjev_branch_v03", "tiny_jev_marker"):
             raise ValueError("unsupported Jev prompt protocol")
-        if temperatures is not None and (set(temperatures) != {"choice", "noul", "score"}
-                                         or any(not isinstance(value, (int, float))
-                                                or not math.isfinite(value) or value <= 0
-                                                for value in temperatures.values())):
+        if temperatures is not None and (
+            set(temperatures) != {"choice", "noul", "score"}
+            or any(
+                not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
+                for value in temperatures.values()
+            )
+        ):
             raise ValueError("invalid Jev calibration temperatures")
         if protocol == "tiny_jev_marker":
             from safetensors.torch import load_file
@@ -422,8 +566,13 @@ class JevEndpointPlugin:
         if isinstance(model_id, list):
             model_id = model_id[0] if model_id else None
         state.vllm_jev_service = _JevService(
-            engine_client, engine_client.get_tokenizer(), max_inflight,
+            engine_client,
+            engine_client.get_tokenizer(),
+            max_inflight,
             float(default_temperature),
             model_id if isinstance(model_id, str) and model_id else "vllm-jev",
-            protocol, temperatures, head, marker,
+            protocol,
+            temperatures,
+            head,
+            marker,
         )

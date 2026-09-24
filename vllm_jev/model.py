@@ -24,8 +24,8 @@ def register() -> None:
 
 
 def _model_class():
-    from vllm.model_executor.models.adapters import as_seq_cls_model
     import torch
+    from vllm.model_executor.models.adapters import as_seq_cls_model
     from vllm.model_executor.models.interfaces import IsHybrid, SupportsMRoPE
     from vllm.model_executor.models.qwen3_5 import (
         Qwen3_5ForCausalLM,

@@ -6,8 +6,10 @@ from collections.abc import Sequence
 
 
 def render_value(value):
-    return value if isinstance(value, str) else json.dumps(
-        value, ensure_ascii=False, sort_keys=True, allow_nan=False
+    return (
+        value
+        if isinstance(value, str)
+        else json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
     )
 
 
@@ -38,28 +40,47 @@ BRANCH_SYSTEM = (
 )
 
 
-def branch_token_ids(tokenizer, state, question: str,
-                     options: Sequence[str]) -> list[list[int]]:
+def branch_token_ids(
+    tokenizer, state, question: str, options: Sequence[str]
+) -> list[list[int]]:
     """Keep OpenJev-0.6B's independently tokenized prefix and suffix."""
     candidate_prompts(state, question, options)  # Validate the common Choice contract.
     marker = "OPENJEV_STATE_SLOT_7429"
     template = tokenizer.apply_chat_template(
-        [{"role": "system", "content": BRANCH_SYSTEM},
-         {"role": "user", "content": marker}],
-        tokenize=False, add_generation_prompt=True, enable_thinking=False,
+        [
+            {"role": "system", "content": BRANCH_SYSTEM},
+            {"role": "user", "content": marker},
+        ],
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=False,
     )
     header, tail = template.split(marker)
-    state_text = (state if isinstance(state, str) else json.dumps(
-        state, sort_keys=True, ensure_ascii=False, allow_nan=False,
-        separators=(",", ":")))
+    state_text = (
+        state
+        if isinstance(state, str)
+        else json.dumps(
+            state,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    )
     prefix = header + "State:\n" + state_text
     prefix_ids = tokenizer.encode(prefix, add_special_tokens=False)
     if len(prefix_ids) > 768:
         raise ValueError("state prefix exceeds OpenJev-0.6B's 768-token limit")
     prompts = []
     for option in options:
-        suffix = ("\n\nQuestion:\n" + question + "\n\nCandidate answer:\n" + option
-                  + "\n\nIs this candidate correct? Answer Yes or No." + tail)
+        suffix = (
+            "\n\nQuestion:\n"
+            + question
+            + "\n\nCandidate answer:\n"
+            + option
+            + "\n\nIs this candidate correct? Answer Yes or No."
+            + tail
+        )
         suffix_ids = tokenizer.encode(suffix, add_special_tokens=False)
         if len(suffix_ids) > 192:
             raise ValueError("candidate branch exceeds OpenJev-0.6B's 192-token limit")
@@ -67,13 +88,24 @@ def branch_token_ids(tokenizer, state, question: str,
     return prompts
 
 
-def tiny_token_ids(tokenizer, state, question: str,
-                   options: Sequence[str], *, cue: str = " - correct?",
-                   opt_token: str = "<opt>") -> tuple[list[int], list[int]]:
+def tiny_token_ids(
+    tokenizer,
+    state,
+    question: str,
+    options: Sequence[str],
+    *,
+    cue: str = " - correct?",
+    opt_token: str = "<opt>",
+) -> tuple[list[int], list[int]]:
     """Encode Tiny-Jev's single sequence and candidate readout positions."""
     candidate_prompts(state, question, options)
-    state_text = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
-    ids_of = lambda value: tokenizer(value, add_special_tokens=False)["input_ids"]
+    state_text = (
+        state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+    )
+
+    def ids_of(value):
+        return tokenizer(value, add_special_tokens=False)["input_ids"]
+
     opt_id = tokenizer.convert_tokens_to_ids(opt_token)
     if opt_id is None or opt_id == tokenizer.unk_token_id:
         raise ValueError("Tiny-Jev option marker is missing from the tokenizer")
@@ -85,8 +117,9 @@ def tiny_token_ids(tokenizer, state, question: str,
     state_ids = ids_of(state_text)
     if len(state_ids) > budget:
         head = max(0, int(budget * 0.7))
-        state_ids = (state_ids[:head] + state_ids[-(budget - head):]
-                     if budget > 0 else [])
+        state_ids = (
+            state_ids[:head] + state_ids[-(budget - head) :] if budget > 0 else []
+        )
     ids, positions = pre + state_ids + mid, []
     for option_ids in opts:
         positions.append(len(ids) + len(option_ids) - 3)
@@ -109,7 +142,9 @@ def probabilities(scores: Sequence[float], temperature: float = 1.0) -> list[flo
     return [weight / total for weight in weights]
 
 
-def choice_result(options: Sequence[str], scores: Sequence[float], temperature: float = 1.0) -> dict:
+def choice_result(
+    options: Sequence[str], scores: Sequence[float], temperature: float = 1.0
+) -> dict:
     if len(options) != len(scores):
         raise ValueError("candidate and score counts differ")
     probs = probabilities(scores, temperature)

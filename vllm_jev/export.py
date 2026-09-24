@@ -10,10 +10,10 @@ import torch
 from peft import PeftModel
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
-from transformers import AutoConfig, AutoTokenizer, Qwen3ForCausalLM, Qwen3_5ForCausalLM
+from transformers import AutoConfig, AutoTokenizer, Qwen3_5ForCausalLM, Qwen3ForCausalLM
 
-from .model import ARCHITECTURE, QWEN3_ARCHITECTURE
 from .checkpoint import sha256
+from .model import ARCHITECTURE, QWEN3_ARCHITECTURE
 
 
 def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
@@ -31,23 +31,35 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     if config.model_type == "qwen3_5_text":
         architecture, prompt_protocol = ARCHITECTURE, "open_jev_choice"
         model = Qwen3_5ForCausalLM.from_pretrained(
-            base, config=config, dtype=torch.bfloat16,
-            device_map={"": "cuda:0"}, local_files_only=True,
+            base,
+            config=config,
+            dtype=torch.bfloat16,
+            device_map={"": "cuda:0"},
+            local_files_only=True,
         )
         # This release trained LoRA on the inner text backbone.
         backbone = model.model
-        reference_weight = backbone.layers[0].linear_attn.in_proj_qkv.weight.detach().float().clone()
+        reference_weight = (
+            backbone.layers[0].linear_attn.in_proj_qkv.weight.detach().float().clone()
+        )
         peft = PeftModel.from_pretrained(backbone, adapter, is_trainable=False)
         model.model = peft.merge_and_unload(safe_merge=True)
-        merged_weight = model.model.layers[0].linear_attn.in_proj_qkv.weight.detach().float()
+        merged_weight = (
+            model.model.layers[0].linear_attn.in_proj_qkv.weight.detach().float()
+        )
         old_prefix = "model.language_model."
     elif config.model_type == "qwen3":
         architecture, prompt_protocol = QWEN3_ARCHITECTURE, "openjev_branch_v03"
         model = Qwen3ForCausalLM.from_pretrained(
-            base, config=config, dtype=torch.bfloat16,
-            device_map={"": "cuda:0"}, local_files_only=True,
+            base,
+            config=config,
+            dtype=torch.bfloat16,
+            device_map={"": "cuda:0"},
+            local_files_only=True,
         )
-        reference_weight = model.model.layers[0].self_attn.q_proj.weight.detach().float().clone()
+        reference_weight = (
+            model.model.layers[0].self_attn.q_proj.weight.detach().float().clone()
+        )
         peft = PeftModel.from_pretrained(model, adapter, is_trainable=False)
         model = peft.merge_and_unload(safe_merge=True)
         merged_weight = model.model.layers[0].self_attn.q_proj.weight.detach().float()
@@ -60,8 +72,11 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     del reference_weight
     model.eval()
 
-    head = (load_file(str(head_path)) if head_path.suffix == ".safetensors"
-            else torch.load(head_path, map_location="cpu", weights_only=True))
+    head = (
+        load_file(str(head_path))
+        if head_path.suffix == ".safetensors"
+        else torch.load(head_path, map_location="cpu", weights_only=True)
+    )
     weight = head["weight"].detach().float().contiguous()
     bias = head.get("bias", torch.zeros(1)).detach().float().contiguous()
     if weight.shape != (1, config.hidden_size) or bias.shape != (1,):
@@ -71,7 +86,9 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
 
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True)
     if not tokenizer.chat_template:
-        raise ValueError("base snapshot is missing its chat template; download the complete tokenizer")
+        raise ValueError(
+            "base snapshot is missing its chat template; download the complete tokenizer"
+        )
     model.save_pretrained(output, safe_serialization=True, max_shard_size="4GB")
     tokenizer.save_pretrained(output)
 
@@ -88,42 +105,56 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
             raise FileNotFoundError("expected a safetensors checkpoint")
         with safe_open(single, framework="pt", device="cpu") as file:
             names = list(file.keys())
-            total_size = sum(file.get_tensor(name).numel() *
-                             file.get_tensor(name).element_size() for name in names)
-        index = {"metadata": {"total_size": total_size},
-                 "weight_map": {name: single.name for name in names}}
+            total_size = sum(
+                file.get_tensor(name).numel() * file.get_tensor(name).element_size()
+                for name in names
+            )
+        index = {
+            "metadata": {"total_size": total_size},
+            "weight_map": {name: single.name for name in names},
+        }
     new_prefix = "model."
     weight_map = index["weight_map"]
-    if not all(name.startswith(old_prefix) or name == "lm_head.weight"
-               for name in weight_map):
+    if not all(
+        name.startswith(old_prefix) or name == "lm_head.weight" for name in weight_map
+    ):
         raise ValueError("unexpected HF text checkpoint weight names")
     rewritten_total_size = 0
     for filename in sorted(set(weight_map.values())):
         shard_path = output / filename
         with safe_open(shard_path, framework="pt", device="cpu") as file:
-            tensors = {new_prefix + name.removeprefix(old_prefix): file.get_tensor(name)
-                       for name in file.keys() if name.startswith(old_prefix)}
+            tensors = {
+                new_prefix + name.removeprefix(old_prefix): file.get_tensor(name)
+                for name in file.keys()
+                if name.startswith(old_prefix)
+            }
         if tensors:
-            rewritten_total_size += sum(tensor.numel() * tensor.element_size()
-                                        for tensor in tensors.values())
+            rewritten_total_size += sum(
+                tensor.numel() * tensor.element_size() for tensor in tensors.values()
+            )
             temporary = shard_path.with_suffix(".tmp.safetensors")
             save_file(tensors, temporary)
             os.replace(temporary, shard_path)
         else:
             shard_path.unlink()
-    index["weight_map"] = {new_prefix + name.removeprefix(old_prefix): filename
-                           for name, filename in weight_map.items()
-                           if name.startswith(old_prefix)}
+    index["weight_map"] = {
+        new_prefix + name.removeprefix(old_prefix): filename
+        for name, filename in weight_map.items()
+        if name.startswith(old_prefix)
+    }
 
     score_path = output / "score.safetensors"
     save_file({"score.weight": weight, "score.bias": bias}, score_path)
     if "score.weight" in index["weight_map"] or "score.bias" in index["weight_map"]:
         raise ValueError("export already contains a score head")
-    index["weight_map"].update({"score.weight": score_path.name,
-                                "score.bias": score_path.name})
-    index["metadata"]["total_size"] = (rewritten_total_size +
-                                         weight.numel() * weight.element_size() +
-                                         bias.numel() * bias.element_size())
+    index["weight_map"].update(
+        {"score.weight": score_path.name, "score.bias": score_path.name}
+    )
+    index["metadata"]["total_size"] = (
+        rewritten_total_size
+        + weight.numel() * weight.element_size()
+        + bias.numel() * bias.element_size()
+    )
     index_path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
 
     config_path = output / "config.json"
@@ -138,16 +169,21 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     calibration_temperature = None
     calibration_temperatures = None
     if calibration_path.is_file():
-        calibration_temperature = float(json.loads(calibration_path.read_text())["temperature"])
+        calibration_temperature = float(
+            json.loads(calibration_path.read_text())["temperature"]
+        )
         if not math.isfinite(calibration_temperature) or calibration_temperature <= 0:
             raise ValueError("invalid calibration temperature")
     elif (head_path.with_name("calibration-v03.json")).is_file():
         calibration_path = head_path.with_name("calibration-v03.json")
         raw = json.loads(calibration_path.read_text())
-        calibration_temperatures = {key: float(raw[key]["temperature"])
-                                    for key in ("choice", "noul", "score")}
-        if any(not math.isfinite(value) or value <= 0
-               for value in calibration_temperatures.values()):
+        calibration_temperatures = {
+            key: float(raw[key]["temperature"]) for key in ("choice", "noul", "score")
+        }
+        if any(
+            not math.isfinite(value) or value <= 0
+            for value in calibration_temperatures.values()
+        ):
             raise ValueError("invalid calibration temperatures")
 
     manifest = {

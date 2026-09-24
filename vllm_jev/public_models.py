@@ -12,7 +12,6 @@ from huggingface_hub import snapshot_download
 from .checkpoint import sha256, verify
 from .export import export
 
-
 PROFILES = {
     "2b": (
         "ZefanCai/Open-Jev-2B",
@@ -62,10 +61,12 @@ def prepare(profile: str, workspace: Path) -> Path:
     if output.exists():
         verify(output, full=True)
         manifest = json.loads((output / "jev_manifest.json").read_text())
-        if (manifest.get("foundation_revision") != base_revision or
-            manifest.get("adapter_weights_sha256") != adapter_hash or
-            manifest.get("head_sha256") != head_hash or
-            manifest.get("source_temperature_sha256") != temperature_hash):
+        if (
+            manifest.get("foundation_revision") != base_revision
+            or manifest.get("adapter_weights_sha256") != adapter_hash
+            or manifest.get("head_sha256") != head_hash
+            or manifest.get("source_temperature_sha256") != temperature_hash
+        ):
             raise ValueError("existing checkpoint does not match the public release")
         if using_legacy:
             canonical = workspace / "checkpoint" / adapter_id
@@ -74,33 +75,49 @@ def prepare(profile: str, workspace: Path) -> Path:
             return canonical
         return output
 
-    package = Path(snapshot_download(
-        repo_id=adapter_id,
-        revision=adapter_revision,
-        local_dir=workspace / "public" / adapter_id,
-        allow_patterns=["package/checkpoint/*", "release-manifest.json",
-                        "LICENSE", "UPSTREAM.md"],
-        token=False,
-    )) / "package" / "checkpoint"
+    package = (
+        Path(
+            snapshot_download(
+                repo_id=adapter_id,
+                revision=adapter_revision,
+                local_dir=workspace / "public" / adapter_id,
+                allow_patterns=[
+                    "package/checkpoint/*",
+                    "release-manifest.json",
+                    "LICENSE",
+                    "UPSTREAM.md",
+                ],
+                token=False,
+            )
+        )
+        / "package"
+        / "checkpoint"
+    )
     specification = json.loads((package / "model.json").read_text())
     if (specification.get("model_id"), specification.get("revision")) != (
-        base_id, base_revision
+        base_id,
+        base_revision,
     ):
         raise ValueError("public checkpoint does not match its pinned base model")
-    if (sha256(package / "adapter" / "adapter_model.safetensors") != adapter_hash or
-        sha256(package / "head.pt") != head_hash or
-        sha256(package / "temperature.json") != temperature_hash):
+    if (
+        sha256(package / "adapter" / "adapter_model.safetensors") != adapter_hash
+        or sha256(package / "head.pt") != head_hash
+        or sha256(package / "temperature.json") != temperature_hash
+    ):
         raise ValueError("public checkpoint files failed release hash verification")
 
-    base = Path(snapshot_download(
-        repo_id=base_id,
-        revision=base_revision,
-        cache_dir=os.environ.get("HF_HUB_CACHE"),
-        token=False,
-    ))
+    base = Path(
+        snapshot_download(
+            repo_id=base_id,
+            revision=base_revision,
+            cache_dir=os.environ.get("HF_HUB_CACHE"),
+            token=False,
+        )
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".open-jev-{profile}-",
-                                            dir=output.parent))
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".open-jev-{profile}-", dir=output.parent)
+    )
     try:
         export(base, package / "adapter", package / "head.pt", temporary)
         verify(temporary, full=True)
