@@ -8,7 +8,7 @@ from pathlib import Path
 
 from safetensors import safe_open
 
-from .model import ARCHITECTURE
+from .model import ARCHITECTURE, QWEN3_ARCHITECTURE, QWEN3_TOKEN_ARCHITECTURE
 
 
 def sha256(path: Path) -> str:
@@ -24,23 +24,28 @@ def verify(path: Path, *, full: bool = True) -> dict:
     manifest=json.loads((path/"jev_manifest.json").read_text())
     if manifest.get("format")!="vllm-jev-pooling-v1":
         raise ValueError("unrecognized Jev checkpoint format")
-    if manifest.get("architecture")!=ARCHITECTURE:
+    architecture=manifest.get("architecture")
+    if architecture not in (ARCHITECTURE,QWEN3_ARCHITECTURE,QWEN3_TOKEN_ARCHITECTURE):
         raise ValueError("Jev architecture mismatch")
     config=json.loads((path/"config.json").read_text())
-    if config.get("architectures")!=[ARCHITECTURE] or config.get("num_labels")!=1:
+    if config.get("architectures")!=[architecture] or (architecture!=QWEN3_TOKEN_ARCHITECTURE
+                                                        and config.get("num_labels")!=1):
         raise ValueError("classifier config mismatch")
     hidden_size=config.get("hidden_size")
     if not isinstance(hidden_size,int) or hidden_size<=0:
         raise ValueError("invalid hidden size")
     index=json.loads((path/"model.safetensors.index.json").read_text())
-    if index["weight_map"].get("score.weight")!="score.safetensors":
-        raise ValueError("score weight not indexed")
-    if index["weight_map"].get("score.bias")!="score.safetensors":
-        raise ValueError("score bias not indexed")
+    if architecture!=QWEN3_TOKEN_ARCHITECTURE:
+        if index["weight_map"].get("score.weight")!="score.safetensors":
+            raise ValueError("score weight not indexed")
+        if index["weight_map"].get("score.bias")!="score.safetensors":
+            raise ValueError("score bias not indexed")
     with safe_open(path/"score.safetensors",framework="pt",device="cpu") as file:
-        if file.get_tensor("score.weight").shape!=(1,hidden_size):
+        weight_name=("weight" if architecture==QWEN3_TOKEN_ARCHITECTURE else "score.weight")
+        bias_name=("bias" if architecture==QWEN3_TOKEN_ARCHITECTURE else "score.bias")
+        if file.get_tensor(weight_name).shape!=(1,hidden_size):
             raise ValueError("invalid score head shape")
-        if file.get_tensor("score.bias").shape!=(1,):
+        if file.get_tensor(bias_name).shape!=(1,):
             raise ValueError("invalid score bias shape")
     names=list(manifest["files"]) if full else [
         "config.json","model.safetensors.index.json","score.safetensors",
@@ -55,7 +60,7 @@ def verify(path: Path, *, full: bool = True) -> dict:
     temperature=manifest.get("calibration_temperature",1.0)
     if not isinstance(temperature,(int,float)) or not math.isfinite(temperature) or temperature<=0:
         raise ValueError("invalid calibration temperature")
-    return {"format":manifest["format"],"architecture":ARCHITECTURE,
+    return {"format":manifest["format"],"architecture":architecture,
             "foundation_revision":manifest["foundation_revision"],
             "checked_files":len(names),"full":full}
 

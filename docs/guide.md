@@ -2,29 +2,31 @@
 
 This guide covers public model setup, the HTTP API, and vLLM serving options. Start with the [README](../README.md) if you want the shortest path to a working server. The plugin targets **vLLM 0.29.0**.
 
-## Public models
+## Supported models
 
-Choose one of the released Open-Jev profiles:
+Pass one of these Hugging Face model IDs to `quickstart.sh`. With the default `--protocol auto`, the launcher checks the repository layout and selects a native vLLM scoring protocol.
 
-| Model ID | Base | Approximate exported size |
-|---|---|---:|
-| [`ZefanCai/Open-Jev-2B`](https://huggingface.co/ZefanCai/Open-Jev-2B) | Qwen3.5-2B | 3.6 GB |
-| [`ZefanCai/Open-Jev-9B`](https://huggingface.co/ZefanCai/Open-Jev-9B) | Qwen3.5-9B | 15 GB |
+| Model ID | Native protocol | Readout |
+|---|---|---|
+| [`ZefanCai/Open-Jev-2B`](https://huggingface.co/ZefanCai/Open-Jev-2B) | `open_jev_choice` | Qwen3.5 candidate branches + scalar head |
+| [`ZefanCai/Open-Jev-9B`](https://huggingface.co/ZefanCai/Open-Jev-9B) | `open_jev_choice` | Qwen3.5 candidate branches + scalar head |
+| [`IamBusy/OpenJev-0.6B`](https://huggingface.co/IamBusy/OpenJev-0.6B) | `openjev_branch_v03` | Qwen3 candidate branches + scalar head |
+| [`lostargon/Tiny-Jev`](https://huggingface.co/lostargon/Tiny-Jev) | `tiny_jev_marker` | Qwen3 token embeddings + marker-position head |
 
-Follow the three setup commands in the [Quick start](../README.md#quick-start), or run them together after installing uv:
+Follow the three setup commands in [Getting Started](../README.md#getting-started), or run them together after installing uv:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B
-CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-9B
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh lostargon/Tiny-Jev
 ```
 
-The script calls `install_runtime.sh`, prepares the public checkpoint, and calls `serve.sh`. The installer adds this plugin to the runtime. The downloader verifies the released files before export. Files are saved under `.local/` by default. Set `VLLM_JEV_HOME=/path/to/storage` before `quickstart.sh` to move the runtime, cache, and checkpoint together. Checkpoints use `checkpoint/ZefanCai/Open-Jev-2B` or `checkpoint/ZefanCai/Open-Jev-9B`. An existing `open-jev-2b` or `open-jev-9b` directory is reused through a link at the new path. The shorter `2b` and `9b` inputs remain accepted.
+The script calls `install_runtime.sh`, prepares the checkpoint, and calls `serve.sh`. Files are saved under `.local/` by default; set `VLLM_JEV_HOME=/path/to/storage` to move the runtime, cache, and checkpoint together. The exported model is stored at `checkpoint/<Hugging Face ID>`. Existing `open-jev-2b` and `open-jev-9b` directories are reused through links at their new paths. The adapter releases are checked against their published file hashes; the Tiny-Jev importer pins the Hub revision and records the source-weight hash.
 
-Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded with each profile; a direct Choice request can override it.
+Choose the GPU explicitly with `CUDA_VISIBLE_DEVICES`. The released calibration temperature is loaded for each model; a direct Choice request can override it. To require a specific format, pass `--protocol open_jev_choice`, `--protocol openjev_branch_v03`, or `--protocol tiny_jev_marker` after the model ID. The override still checks the repository layout. The default is `auto`.
 
 ### Export another Open-Jev checkpoint
 
-For a compatible Qwen3.5 text backbone, LoRA adapter, and scalar `head.pt`:
+For a compatible Qwen3.5 text backbone with `head.pt`, or a Qwen3 backbone with `head.safetensors`:
 
 ```bash
 .local/runtime/bin/python -m vllm_jev.export \
@@ -34,14 +36,14 @@ For a compatible Qwen3.5 text backbone, LoRA adapter, and scalar `head.pt`:
   --output /path/to/jev-checkpoint
 ```
 
-Place `temperature.json` beside `head.pt` to use its temperature by default. Otherwise the default is `1.0`. The exporter merges the LoRA and writes a safetensors classifier. Serving loads the exported model; it performs no training.
+Place `temperature.json` beside `head.pt` for the Qwen3.5 format, or `calibration-v03.json` beside `head.safetensors` for the Qwen3 branch format. The exporter merges the LoRA and writes a safetensors classifier. Serving loads the exported model; it performs no training.
 
 ## How serving works
 
 ```text
 Choice request
-  → format one prompt per candidate
-  → score candidates through vLLM pooling
+  → select a prompt/readout protocol from the checkpoint
+  → run the Qwen backbone through vLLM pooling
   → apply temperature and softmax
   → return the chosen label and probabilities
 ```
@@ -50,16 +52,16 @@ The package uses two official [vLLM plugin entry points](https://docs.vllm.ai/en
 
 | Entry point | Role |
 |---|---|
-| `vllm.general_plugins` | Register the Qwen3.5 scalar classifier. |
+| `vllm.general_plugins` | Register the Qwen3/Qwen3.5 scalar and token-embedding models. |
 | `vllm.endpoint_plugins` | Add the Choice and System One HTTP routes. |
 
-vLLM handles scheduling, batching, compilation, and KV-cache management. The endpoint sends each candidate to `EngineClient.encode` with `task="classify"`. Candidates within a request share a cache salt, which allows common-prefix reuse.
+vLLM handles scheduling, batching, compilation, and KV-cache management. The two branch protocols call `EngineClient.encode` with `task="classify"` for each candidate and share a request-local cache salt. Tiny-Jev sends one sequence with `task="token_embed"` and scores its option positions in the endpoint.
 
 ## HTTP API
 
 ### System One
 
-`POST /v1/systemone` accepts a shared `state` and a map of `questions`. Each question has `type`, `instructions`, and `criteria`. See the [README example](../README.md#make-a-decision).
+`POST /v1/systemone` accepts a shared `state` and a map of `questions`. Each question has `type`, `instructions`, and `criteria`. See the [README example](../README.md#example).
 
 | Type | `criteria` | Result |
 |---|---|---|
@@ -68,6 +70,7 @@ vLLM handles scheduling, batching, compilation, and KV-cache management. The end
 | `score` | Array of 2–10 ordered descriptions | Expected score and level probabilities |
 
 A request may contain up to 64 questions and 256 candidate sequences. `usage.output_tokens` is zero because the model returns pooled scores rather than generating answer text.
+For `score`, Tiny-Jev uses the level descriptions as probability keys; the scalar-head protocols use zero-based level indices.
 
 ### Choice and batch
 
@@ -90,11 +93,11 @@ curl -sS http://127.0.0.1:8795/plugins/vllm-jev/choice \
   -d '{"state":"The sky is blue.","question":"Choose the true statement.","options":["The sky is blue","The sky is green"]}'
 ```
 
-Native `/classify` and `/pooling` remain available for per-input scores. The Jev endpoints add cross-candidate normalization.
+Native `/classify` remains available for the scalar-head models, and `/pooling` exposes the selected native task. The Jev endpoints add model-specific prompts and cross-candidate normalization.
 
 ## Serve with vLLM directly
 
-For an exported checkpoint, use the standard CLI:
+For an exported Qwen3.5 scalar-head checkpoint, use the standard CLI:
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0
@@ -108,7 +111,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
   --served-model-name ZefanCai/Open-Jev-2B --host 127.0.0.1 --port 8795
 ```
 
-`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. Set `VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B` to use the Hugging Face ID in `/v1/models` and System One responses. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B --port 9000` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
+`scripts/serve.sh /path/to/jev-checkpoint` provides these defaults, verifies the checkpoint, and forwards extra vLLM flags. It uses `.local/runtime` by default. Set `VLLM_JEV_MODEL_ID` to the Hugging Face ID for `/v1/models` and System One responses. For another workspace, set `VLLM_JEV_HOME`. For example, `CUDA_VISIBLE_DEVICES=0 VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B VLLM_JEV_PORT=9000 bash scripts/serve.sh .local/checkpoint/ZefanCai/Open-Jev-2B` changes the listening port. The direct CLI above is available when you want to manage every flag yourself.
 
 Use native vLLM options to tune the server:
 
@@ -124,18 +127,18 @@ See the official [engine arguments](https://docs.vllm.ai/en/v0.29.0/configuratio
 
 ## Compatibility and validation
 
-The one-command profiles load the released **Qwen3.5 scalar-head Open-Jev 2B/9B** models. A Hugging Face repository name identifies a checkpoint; it does not specify how to score candidates. We checked these other public repositories by their model cards, configurations, and file layouts. Four full repository IDs were also passed to the current loader; it rejected them before downloading weights.
+Automatic detection now covers the four models and three protocols in the [supported-model table](#supported-models). It reads the repository layout and validates the selected protocol before export. A Hugging Face name by itself does not imply that a new architecture can use an existing readout.
 
 | Repository | Published format | Current plugin |
 |---|---|---|
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Qwen3-0.6B LoRA and separate `head.safetensors` | Needs a Qwen3 adapter and its own prompt/calibration importer. |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Full `tiny_jev` model with a marker-token decision head | Needs its custom model architecture. |
 | [com-kotobalabs/open-jev-deberta-v3-large](https://huggingface.co/com-kotobalabs/open-jev-deberta-v3-large) | DeBERTa encoder and multi-option head | Needs a different pooling model. |
 | [apus-ailab/APUS-OpenJev-v1-4B](https://huggingface.co/apus-ailab/APUS-OpenJev-v1-4B) | Qwen3.5 generative model with vocabulary-based candidate scoring | Native generation weights do not supply this plugin's scalar head. |
-| [ZefanCai/Open-Jev-27B-v1.1](https://huggingface.co/ZefanCai/Open-Jev-27B-v1.1) | Similar LoRA/head package on Qwen3.8-27B | Package shape is close, but the Qwen3.8 backbone is not supported here. |
+| [ZefanCai/Open-Jev-27B-v1.1](https://huggingface.co/ZefanCai/Open-Jev-27B-v1.1) | Similar LoRA/head package on Qwen3.8-27B; its pinned config declares `qwen3_5_text` | Auto-detection accepts the architecture preflight, but full weight export and GPU serving have not been run. |
 
-This is a format check, not a GPU inference or accuracy comparison for those five models. The `/v1/systemone` route provides a familiar request shape; it does not make different weights interchangeable. Other Jev-style projects, including [Laya](https://github.com/NandhaKishorM/laya) and [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev), also use different readouts.
+The DeBERTa and APUS repositories were rejected before weight download; neither has passed a native inference test here. The 27B model passed the pinned-config preflight without downloading its roughly 55.6 GB base weights. The `/v1/systemone` route provides a common request shape without treating different weights as interchangeable. Other Jev-style projects, including [Laya](https://github.com/NandhaKishorM/laya) and [SemIf](https://github.com/TheoLeeCJ/SemIf-OpenJev), also use different readouts.
 
 Both public profiles started with the pinned runtime and passed Choice, Noul, and Score response checks. One prompt per profile selected the same candidate as the original HF/PEFT path. Maximum candidate-probability differences on those prompts were **0.00195 (2B)** and **0.00078 (9B)**. These are spot checks, not full accuracy benchmarks. Load tests exercised varied prompt lengths, option counts, and concurrency without response errors.
+
+On seven local Choice/Noul/Score cases, `IamBusy/OpenJev-0.6B` matched the original model's selections. The largest absolute probability difference was **0.0201** with vLLM BF16 and **0.00749** with vLLM FP32 against the author's CPU FP32 loader. `lostargon/Tiny-Jev` matched the original selections on seven cases; its largest probability difference was **0.00261**. Both models completed 64 short, three-question requests at client concurrency 8 with zero response errors. Client p95 was about **93 ms** for the 0.6B branch model and **74 ms** for Tiny-Jev in separate single-GPU tests. These are small parity and stability checks, not benchmark-wide accuracy measurements.
 
 This is a text-only pooling model. It returns decision scores, so generation features such as text streaming and tool calls are outside this API. The example binds to `127.0.0.1`; follow vLLM's [security guidance](https://docs.vllm.ai/en/v0.29.0/usage/security/) before exposing the service on a network.

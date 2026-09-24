@@ -9,10 +9,10 @@ from pathlib import Path
 import torch
 from peft import PeftModel
 from safetensors import safe_open
-from safetensors.torch import save_file
-from transformers import AutoConfig, AutoTokenizer, Qwen3_5ForCausalLM
+from safetensors.torch import load_file, save_file
+from transformers import AutoConfig, AutoTokenizer, Qwen3ForCausalLM, Qwen3_5ForCausalLM
 
-from .model import ARCHITECTURE
+from .model import ARCHITECTURE, QWEN3_ARCHITECTURE
 from .checkpoint import sha256
 
 
@@ -26,27 +26,44 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
 
     config = AutoConfig.from_pretrained(base, local_files_only=True).get_text_config()
-    if config.model_type != "qwen3_5_text" or config.hidden_size <= 0:
-        raise ValueError("this export recipe requires a Qwen3.5 text backbone")
-    model = Qwen3_5ForCausalLM.from_pretrained(
-        base, config=config, dtype=torch.bfloat16,
-        device_map={"": "cuda:0"}, local_files_only=True,
-    )
-    # Open-Jev trained LoRA on Qwen3_5TextModel, not the multimodal wrapper.
-    text_backbone = model.model
-    reference_weight = text_backbone.layers[0].linear_attn.in_proj_qkv.weight.detach().float().clone()
-    peft = PeftModel.from_pretrained(text_backbone, adapter, is_trainable=False)
-    model.model = peft.merge_and_unload(safe_merge=True)
-    merged_weight = model.model.layers[0].linear_attn.in_proj_qkv.weight.detach().float()
+    if config.hidden_size <= 0:
+        raise ValueError("invalid text backbone hidden size")
+    if config.model_type == "qwen3_5_text":
+        architecture, prompt_protocol = ARCHITECTURE, "open_jev_choice"
+        model = Qwen3_5ForCausalLM.from_pretrained(
+            base, config=config, dtype=torch.bfloat16,
+            device_map={"": "cuda:0"}, local_files_only=True,
+        )
+        # This release trained LoRA on the inner text backbone.
+        backbone = model.model
+        reference_weight = backbone.layers[0].linear_attn.in_proj_qkv.weight.detach().float().clone()
+        peft = PeftModel.from_pretrained(backbone, adapter, is_trainable=False)
+        model.model = peft.merge_and_unload(safe_merge=True)
+        merged_weight = model.model.layers[0].linear_attn.in_proj_qkv.weight.detach().float()
+        old_prefix = "model.language_model."
+    elif config.model_type == "qwen3":
+        architecture, prompt_protocol = QWEN3_ARCHITECTURE, "openjev_branch_v03"
+        model = Qwen3ForCausalLM.from_pretrained(
+            base, config=config, dtype=torch.bfloat16,
+            device_map={"": "cuda:0"}, local_files_only=True,
+        )
+        reference_weight = model.model.layers[0].self_attn.q_proj.weight.detach().float().clone()
+        peft = PeftModel.from_pretrained(model, adapter, is_trainable=False)
+        model = peft.merge_and_unload(safe_merge=True)
+        merged_weight = model.model.layers[0].self_attn.q_proj.weight.detach().float()
+        old_prefix = "model."
+    else:
+        raise ValueError(f"unsupported scalar-head backbone: {config.model_type}")
     merge_max_delta = float((merged_weight - reference_weight).abs().max())
     if merge_max_delta <= 0:
         raise ValueError("LoRA merge did not change the backbone")
     del reference_weight
     model.eval()
 
-    head = torch.load(head_path, map_location="cpu", weights_only=True)
+    head = (load_file(str(head_path)) if head_path.suffix == ".safetensors"
+            else torch.load(head_path, map_location="cpu", weights_only=True))
     weight = head["weight"].detach().float().contiguous()
-    bias = head["bias"].detach().float().contiguous()
+    bias = head.get("bias", torch.zeros(1)).detach().float().contiguous()
     if weight.shape != (1, config.hidden_size) or bias.shape != (1,):
         raise ValueError(f"unexpected scalar head shapes: {weight.shape}, {bias.shape}")
     if not torch.isfinite(weight).all() or not torch.isfinite(bias).all():
@@ -75,7 +92,6 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
                              file.get_tensor(name).element_size() for name in names)
         index = {"metadata": {"total_size": total_size},
                  "weight_map": {name: single.name for name in names}}
-    old_prefix = "model.language_model."
     new_prefix = "model."
     weight_map = index["weight_map"]
     if not all(name.startswith(old_prefix) or name == "lm_head.weight"
@@ -112,7 +128,7 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
 
     config_path = output / "config.json"
     saved_config = json.loads(config_path.read_text())
-    saved_config["architectures"] = [ARCHITECTURE]
+    saved_config["architectures"] = [architecture]
     saved_config["num_labels"] = 1
     saved_config["id2label"] = {"0": "jev_score"}
     saved_config["label2id"] = {"jev_score": 0}
@@ -120,14 +136,24 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
 
     calibration_path = head_path.with_name("temperature.json")
     calibration_temperature = None
+    calibration_temperatures = None
     if calibration_path.is_file():
         calibration_temperature = float(json.loads(calibration_path.read_text())["temperature"])
         if not math.isfinite(calibration_temperature) or calibration_temperature <= 0:
             raise ValueError("invalid calibration temperature")
+    elif (head_path.with_name("calibration-v03.json")).is_file():
+        calibration_path = head_path.with_name("calibration-v03.json")
+        raw = json.loads(calibration_path.read_text())
+        calibration_temperatures = {key: float(raw[key]["temperature"])
+                                    for key in ("choice", "noul", "score")}
+        if any(not math.isfinite(value) or value <= 0
+               for value in calibration_temperatures.values()):
+            raise ValueError("invalid calibration temperatures")
 
     manifest = {
         "format": "vllm-jev-pooling-v1",
-        "architecture": ARCHITECTURE,
+        "architecture": architecture,
+        "prompt_protocol": prompt_protocol,
         "foundation_revision": base.name,
         "foundation_config_sha256": sha256(base / "config.json"),
         "adapter_config_sha256": sha256(adapter / "adapter_config.json"),
@@ -141,6 +167,9 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     }
     if calibration_temperature is not None:
         manifest["calibration_temperature"] = calibration_temperature
+        manifest["source_temperature_sha256"] = sha256(calibration_path)
+    if calibration_temperatures is not None:
+        manifest["calibration_temperatures"] = calibration_temperatures
         manifest["source_temperature_sha256"] = sha256(calibration_path)
     (output / "jev_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest

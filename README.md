@@ -12,12 +12,12 @@
 
 ## About
 
-vLLM Jev serves the public Open-Jev 2B and 9B checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
+vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
 
 - **Native vLLM serving:** scheduling, batching, compilation, KV cache, and metrics.
-- **Parallel candidate scoring:** one pooling score per option, with shared-prefix caching within a decision.
+- **Native decision readouts:** scalar candidate branches or marker-token scores, selected from the model format.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Public checkpoints:** downloads the released adapter and score head, then prepares a vLLM model. Serving does not train.
+- **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
 
@@ -32,7 +32,7 @@ bash scripts/install_runtime.sh .local
 
 # Download and prepare the public Open-Jev-2B model.
 HF_HOME="$PWD/.local/.cache" \
-  .local/runtime/bin/python -m vllm_jev.public_models ZefanCai/Open-Jev-2B --workspace .local
+  .local/runtime/bin/python -m vllm_jev.native_models ZefanCai/Open-Jev-2B --workspace .local
 
 # Start the server on GPU 0.
 VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
@@ -41,7 +41,13 @@ VLLM_JEV_MODEL_ID=ZefanCai/Open-Jev-2B \
 
 The server listens at `http://127.0.0.1:8795`. Check it with `curl -f http://127.0.0.1:8795/health`.
 
-For [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B), replace `ZefanCai/Open-Jev-2B` with `ZefanCai/Open-Jev-9B`. To combine all three steps, run `CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh ZefanCai/Open-Jev-2B` (or `ZefanCai/Open-Jev-9B`). Downloads are reused on later runs.
+For another supported model, replace the Hugging Face ID in the download command, `VLLM_JEV_MODEL_ID`, and checkpoint path. The automatic launcher combines all three steps:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/quickstart.sh IamBusy/OpenJev-0.6B
+```
+
+It also supports `ZefanCai/Open-Jev-2B`, `ZefanCai/Open-Jev-9B`, and `lostargon/Tiny-Jev`. Downloads are reused on later runs. See the [integration guide](docs/guide.md) for the protocol table and optional `--protocol` override.
 
 ## Example
 
@@ -55,7 +61,7 @@ curl -sS http://127.0.0.1:8795/v1/systemone \
 
 The response contains `answers.intent.choice` and `answers.intent.probabilities` for the supplied labels.
 
-See the [integration guide](docs/guide.md) for API fields, model export, storage paths, vLLM options, and multi-GPU serving. This plugin targets **vLLM 0.29.0**, **Python 3.12+**, and the Qwen3.5 scalar-head [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) / [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) releases.
+See the [integration guide](docs/guide.md) for API fields, model export, storage paths, vLLM options, and multi-GPU serving. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
 ## License
 
