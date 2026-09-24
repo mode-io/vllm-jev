@@ -53,7 +53,9 @@ See the [integration guide](docs/guide.md) for API fields, model export, storage
 
 Each row uses the same model, input, and GPU for both endpoints. Lower latency and higher throughput are better.
 
-| Model | Input | Concurrent requests | Median latency: author → vLLM Jev (ms) | Slow-request latency (p95): author → vLLM Jev (ms) | Throughput: author → vLLM Jev (req/s) | Median speedup | Throughput gain |
+Paired values: **Without vLLM Jev → With vLLM Jev**.
+
+| Model | Input | Concurrency | Latency (ms) | P95 (ms) | Throughput (req/s) | Speedup | Throughput gain |
 |---|---|---:|---:|---:|---:|---:|---:|
 | [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Short | 1 | 546.6 → 73.0 | 557.6 → 74.3 | 1.83 → 13.66 | 7.5× | 7.5× |
 | [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Short | 8 | 4360.5 → 100.5 | 4451.8 → 105.2 | 1.83 → 78.83 | 43.4× | 43.1× |
@@ -72,11 +74,11 @@ Each row uses the same model, input, and GPU for both endpoints. Lower latency a
 | [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev)² | Long | 1 | 28.4 → 11.5 | 30.1 → 12.4 | 34.59 → 85.70 | 2.5× | 2.5× |
 | [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev)² | Long | 8 | 223.0 → 43.3 | 224.3 → 59.7 | 35.75 → 179.94 | 5.1× | 5.0× |
 
-Measured on one A800 GPU, with the author and vLLM Jev services run **sequentially**. Each row is one four-option Choice question, 8 warm-up requests, then 64 measured HTTP requests; short and long states contain 67 and 2,058 characters. Latency is measured at the client; p95 means 95% of requests finished within that time. Throughput is completed requests divided by wall time. Every run succeeded **64/64** and both endpoints selected the same option on this repeated test input. Model loading and compilation are excluded.
+Measured on one A800 GPU, with the author and vLLM Jev services run **sequentially**. Each row is one four-option Choice question, 8 warm-up requests, then 64 measured HTTP requests; short and long states contain 67 and 2,058 characters. Latency is the median client latency; p95 means 95% of requests finished within that time. Throughput is completed requests divided by wall time. Every run succeeded **64/64** and both endpoints selected the same option on this repeated test input. Model loading and compilation are excluded.
 
 ¹ The author’s published Linux server runs this model on **CPU**. For a same-GPU comparison, a benchmark-only HTTP service moved its original branch scorer to CUDA and cast the backbone to BF16; the scoring code was unchanged. The published CPU server, with its declared Transformers 4.57.6 / PEFT 0.18.0 versions, was also measured: p50 was 667 ms (short) and 1,880 ms (long) at concurrency 1. At concurrency 8, its CPU throughput was 1.48 req/s (short) and 0.53 req/s (long). CPU values are excluded from the speedup columns.
 
-² Tiny-Jev publishes a Python inference API, not an HTTP server. The author column uses that API behind a minimal benchmark-only HTTP service on the same GPU. The shim serializes calls, as do the other author services.
+² Tiny-Jev publishes a Python inference API, not an HTTP server. The baseline uses that API behind a minimal benchmark-only HTTP service on the same GPU. The shim serializes calls, as do the other author services.
 
 The Open-Jev 2B/9B author servers used their `--prefix-cache` option and the projects' pinned Transformers 5.10.2 / PEFT 0.19.1 versions. Their optional flash-linear-attention kernels were unavailable, so Transformers used its torch reference path. vLLM Jev used its documented default compiled, async, 90% GPU-memory launch. At concurrency 8, gains include queueing in the author HTTP services and vLLM batching; they are serving-path gains, not isolated kernel speedups. The repeated requests do not measure model accuracy or cross-model quality. [Integration details](docs/guide.md) explain the three readout protocols.
 
