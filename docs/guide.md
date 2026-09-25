@@ -28,7 +28,7 @@ curl -f http://127.0.0.1:8795/health
 
 ## Supported models
 
-The same HTTP requests work with all four models.
+The first four models accept the text routes below. Valen accepts text and images through `/v1/systemone`.
 
 | Model | Start server |
 |---|---|
@@ -36,6 +36,7 @@ The same HTTP requests work with all four models.
 | [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 
 ## Serving options
 
@@ -45,7 +46,7 @@ Choose a GPU or pass regular vLLM options after the model ID:
 CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B --port 9000
 ```
 
-The default port is 8795, the GPU memory budget is 90%, and the maximum sequence length is 4,096 tokens. Run `vllm-jev serve --help=all` to see additional vLLM options.
+The default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens for the text models and 8,192 for Valen. Run `vllm-jev serve --help=all` to see additional vLLM options.
 
 Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the downloaded Jev files and prepared model; its default is `.local/` in your current directory.
 
@@ -56,6 +57,8 @@ Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the
 | `POST /plugins/vllm-jev/choice` | Ask one multiple-choice question; returns a label and probabilities. |
 | `POST /plugins/vllm-jev/batch` | Ask several multiple-choice questions together. |
 | `POST /v1/systemone` | Ask Choice, Noul (yes/no), or Score questions about a shared state. |
+
+Valen uses `/v1/systemone` for text and image requests. The two `/plugins/vllm-jev/*` routes are for the four text models.
 
 Noul and Score use `/v1/systemone` with a question `type`. They do not have separate URLs. The native vLLM `/classify` and `/pooling` routes remain available for raw model outputs.
 
@@ -110,3 +113,45 @@ curl -sS http://127.0.0.1:8795/plugins/vllm-jev/batch \
 ```
 
 The reply has one Choice result per request under `results`, in the same order.
+
+### Text and image with Valen
+
+Start `vllm-jev serve Valen-Team/Valen-Preview-0923`. Supply PNG or JPEG images as data URLs in `state.messages`; use a text-only `state` string when no image is needed. This example asks about a local image:
+
+```python
+import base64
+import json
+import urllib.request
+
+image = base64.b64encode(open("image.png", "rb").read()).decode()
+request = {
+    "state": {"messages": [{"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
+        {"type": "text", "text": "Look at this image."},
+    ]}]},
+    "questions": {"color": {"type": "choice", "instructions": "What color is the object?", "criteria": {"red": "Red", "blue": "Blue"}}},
+}
+body = json.dumps(request).encode()
+url = "http://127.0.0.1:8795/v1/systemone"
+response = urllib.request.urlopen(urllib.request.Request(url, body, {"Content-Type": "application/json"}))
+print(json.load(response)["answers"]["color"])
+```
+
+The answer contains `choice`, `confidence`, and `probabilities`. Valen also accepts Noul and Score questions through this route. Its current adapter supports text and images; video is not yet supported.
+
+## Updates
+
+### 2026-09-25
+
+This release adds Valen text/image inference and a fused Tiny-Jev decision head. The Valen adapter runs its Qwen3.5 backbone through native vLLM token pooling and applies the released decision projections at the candidate positions. `vllm-jev serve Valen-Team/Valen-Preview-0923` downloads and prepares the pinned inference weights; it does not train the model.
+
+For 500 image questions from the Valen evaluation game on one A800, the author's sequential inference and vLLM Jev used the same model weights and inputs:
+
+| Measurement | Author runtime | vLLM Jev |
+|---|---:|---:|
+| Median latency | 231.9 ms | 77.3 ms |
+| P95 latency | 240.2 ms | 82.0 ms |
+| Throughput | 4.30 req/s | 12.90 req/s |
+| Target-support accuracy | 86.8% | 86.8% |
+
+The selected choice matched on 494/500 questions (98.8%). Probability outputs have numerical differences: median maximum per-question probability difference was small, but the worst was about 0.295. Accuracy on this set therefore does not imply exact probability equivalence. An HTTP run at eight concurrent requests completed 500/500 requests with 40.6 req/s and 193.4 ms median latency. The fused Tiny-Jev head improved the measured 16-option, concurrency-16 throughput by 12.1%; four-option requests were roughly flat.

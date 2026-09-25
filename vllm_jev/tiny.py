@@ -1,4 +1,4 @@
-"""Convert a full Tiny-Jev checkpoint to native vLLM token embeddings."""
+"""Convert a full Tiny-Jev checkpoint to native vLLM token scoring."""
 
 import json
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from . import QWEN3_TOKEN_ARCHITECTURE
+from . import QWEN3_PROJECTED_ARCHITECTURE
 from .checkpoint import sha256
 
 
@@ -38,19 +38,26 @@ def export_tiny(source: Path, output: Path, model_id: str, revision: str) -> dic
     if head["weight"].shape != (1, config["hidden_size"]) or head["bias"].shape != (1,):
         raise ValueError("invalid Tiny-Jev decision head")
     save_file(tensors, output / "model.safetensors")
-    save_file(head, output / "score.safetensors")
+    score = {f"score.{name}": value for name, value in head.items()}
+    save_file(score, output / "score.safetensors")
     index = {
         "metadata": {
-            "total_size": sum(t.numel() * t.element_size() for t in tensors.values())
+            "total_size": sum(
+                t.numel() * t.element_size()
+                for t in (*tensors.values(), *score.values())
+            )
         },
-        "weight_map": {name: "model.safetensors" for name in tensors},
+        "weight_map": {
+            **{name: "model.safetensors" for name in tensors},
+            **{name: "score.safetensors" for name in score},
+        },
     }
     (output / "model.safetensors.index.json").write_text(
         json.dumps(index, indent=2, sort_keys=True) + "\n"
     )
     config.pop("auto_map", None)
     config["model_type"] = "qwen3"
-    config["architectures"] = [QWEN3_TOKEN_ARCHITECTURE]
+    config["architectures"] = [QWEN3_PROJECTED_ARCHITECTURE]
     (output / "config.json").write_text(
         json.dumps(config, indent=2, sort_keys=True) + "\n"
     )
@@ -59,7 +66,7 @@ def export_tiny(source: Path, output: Path, model_id: str, revision: str) -> dic
             (output / name).write_bytes((source / name).read_bytes())
     manifest = {
         "format": "vllm-jev-pooling-v1",
-        "architecture": QWEN3_TOKEN_ARCHITECTURE,
+        "architecture": QWEN3_PROJECTED_ARCHITECTURE,
         "prompt_protocol": "tiny_jev_marker",
         "source_repository": model_id,
         "source_revision": revision,

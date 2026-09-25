@@ -36,7 +36,13 @@ def main() -> None:
     )
     serve.add_argument(
         "--protocol",
-        choices=("auto", "open_jev_choice", "openjev_branch_v03", "tiny_jev_marker"),
+        choices=(
+            "auto",
+            "open_jev_choice",
+            "openjev_branch_v03",
+            "tiny_jev_marker",
+            "valen_qwen_v1",
+        ),
         default="auto",
         help="Checkpoint protocol (default: auto).",
     )
@@ -55,7 +61,12 @@ def main() -> None:
     checkpoint = Path(model_id)
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
-        model_id = "vllm-jev"
+        valen_manifest = checkpoint / "valen_manifest.json"
+        model_id = (
+            json.loads(valen_manifest.read_text())["source_repository"]
+            if valen_manifest.is_file()
+            else "vllm-jev"
+        )
         prepare = ["-m", "vllm_jev.checkpoint", "--model", str(checkpoint), "--quick"]
     else:
         from huggingface_hub.utils import validate_repo_id
@@ -76,17 +87,22 @@ def main() -> None:
         subprocess.run([sys.executable, *prepare], env=environment, check=True)
     except subprocess.CalledProcessError as error:
         raise SystemExit(error.returncode) from None
+    valen_manifest = checkpoint / "valen_manifest.json"
+    is_valen = valen_manifest.is_file()
     if args.protocol != "auto":
-        manifest = json.loads((checkpoint / "jev_manifest.json").read_text())
+        manifest_path = valen_manifest if is_valen else checkpoint / "jev_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
         if manifest.get("prompt_protocol", "open_jev_choice") != args.protocol:
             parser.error("requested protocol differs from the prepared checkpoint")
 
     defaults = (
-        "--runner pooling --convert none --max-model-len 4096 "
+        f"--runner pooling --convert none --max-model-len {8192 if is_valen else 4096} "
         "--enable-prefix-caching --mamba-cache-mode align "
         "--mamba-ssm-cache-dtype float32 --async-scheduling "
         "--gpu-memory-utilization 0.9 --host 127.0.0.1 --port 8795"
     ).split()
+    if is_valen:
+        defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,
         "-m",

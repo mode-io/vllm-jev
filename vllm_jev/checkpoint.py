@@ -8,7 +8,12 @@ from pathlib import Path
 
 from safetensors import safe_open
 
-from . import ARCHITECTURE, QWEN3_ARCHITECTURE, QWEN3_TOKEN_ARCHITECTURE
+from . import (
+    ARCHITECTURE,
+    QWEN3_ARCHITECTURE,
+    QWEN3_PROJECTED_ARCHITECTURE,
+    QWEN3_TOKEN_ARCHITECTURE,
+)
 
 
 def sha256(path: Path) -> str:
@@ -21,15 +26,25 @@ def sha256(path: Path) -> str:
 
 def verify(path: Path, *, full: bool = True) -> dict:
     path = path.resolve()
+    if (path / "valen_manifest.json").is_file():
+        from .valen_export import verify_valen
+
+        return verify_valen(path, full=full)
     manifest = json.loads((path / "jev_manifest.json").read_text())
     if manifest.get("format") != "vllm-jev-pooling-v1":
         raise ValueError("unrecognized Jev checkpoint format")
     architecture = manifest.get("architecture")
-    if architecture not in (ARCHITECTURE, QWEN3_ARCHITECTURE, QWEN3_TOKEN_ARCHITECTURE):
+    if architecture not in (
+        ARCHITECTURE,
+        QWEN3_ARCHITECTURE,
+        QWEN3_TOKEN_ARCHITECTURE,
+        QWEN3_PROJECTED_ARCHITECTURE,
+    ):
         raise ValueError("Jev architecture mismatch")
     config = json.loads((path / "config.json").read_text())
     if config.get("architectures") != [architecture] or (
-        architecture != QWEN3_TOKEN_ARCHITECTURE and config.get("num_labels") != 1
+        architecture not in (QWEN3_TOKEN_ARCHITECTURE, QWEN3_PROJECTED_ARCHITECTURE)
+        and config.get("num_labels") != 1
     ):
         raise ValueError("classifier config mismatch")
     hidden_size = config.get("hidden_size")

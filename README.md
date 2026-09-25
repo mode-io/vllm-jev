@@ -10,7 +10,8 @@
 <p align="center">
   <a href="docs/guide.md"><b>Documentation</b></a> ·
   <a href="#getting-started"><b>Getting Started</b></a> ·
-  <a href="#example"><b>Example</b></a>
+  <a href="#example"><b>Example</b></a> ·
+  <a href="#updates"><b>Updates</b></a>
 </p>
 
 ---
@@ -22,6 +23,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Native vLLM serving:** scheduling, batching, compilation, KV cache, and metrics.
 - **Native decision readouts:** scalar candidate branches or marker-token scores, selected from the model format.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
+- **Image-aware decisions:** the Valen preview accepts text and images through the same System One API.
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
@@ -70,6 +72,7 @@ Choose a model and run its command:
 | [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 
 ## Example
 
@@ -84,6 +87,16 @@ curl -sS http://127.0.0.1:8795/v1/systemone \
 The response contains `answers.intent.choice` and `answers.intent.probabilities` for the supplied labels.
 
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
+
+For image questions, start `vllm-jev serve Valen-Team/Valen-Preview-0923` and follow the [Valen example](docs/guide.md#text-and-image-with-valen). This preview supports text and images; video input is not yet supported here.
+
+## Updates
+
+### 2026-09-25
+
+- Added native vLLM inference for the Valen preview: text/image Choice, Noul, and Score requests, with automatic download and checkpoint preparation. Training is not part of serving.
+- Added an optional fused decision head for Tiny-Jev. On the measured 16-option, concurrency-16 workload it increased throughput by **12.1%**; shorter 4-option requests were roughly unchanged.
+- On 500 Valen image questions, sequential median latency fell from **231.9 to 77.3 ms** (**3.0×**), while target-support accuracy was **86.8%** for both paths. The selected choice agreed on **98.8%** of questions. These are results for this model and workload, not a general speed claim; probability values are not identical to the author's runtime. See [measurement notes](docs/guide.md#2026-09-25).
 
 ## Hosted inference performance
 

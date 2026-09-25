@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -63,8 +64,63 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
     if model_id in PROFILES:
         model_id = PROFILES[model_id][0]
     validate_repo_id(model_id)
-    if protocol not in ("auto", CHOICE_PROTOCOL, BRANCH_PROTOCOL, TINY_PROTOCOL):
+    if protocol not in (
+        "auto",
+        CHOICE_PROTOCOL,
+        BRANCH_PROTOCOL,
+        TINY_PROTOCOL,
+        "valen_qwen_v1",
+    ):
         raise ValueError(f"unknown protocol: {protocol}")
+    from .valen_export import MODEL_ID as VALEN_ID
+
+    if model_id == VALEN_ID:
+        if protocol not in ("auto", "valen_qwen_v1"):
+            raise ValueError(f"{model_id} uses valen_qwen_v1, not {protocol}")
+        from .valen_export import (
+            BASE_ID,
+            BASE_REVISION,
+            MODEL_REVISION,
+            export_valen,
+            verify_valen,
+        )
+
+        workspace = workspace.resolve()
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            verify_valen(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=MODEL_REVISION,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "checkpoint.pt",
+                    "config.json",
+                    "training_metadata.json",
+                ],
+            )
+        )
+        base = Path(
+            snapshot_download(
+                repo_id=BASE_ID,
+                revision=BASE_REVISION,
+                token=False,
+                cache_dir=os.environ.get("HF_HUB_CACHE"),
+            )
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = Path(tempfile.mkdtemp(prefix=".valen-", dir=output.parent))
+        try:
+            export_valen(base, source, temporary)
+            verify_valen(temporary, full=True)
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+        return output
     known = {spec[0]: name for name, spec in PROFILES.items()}
     if model_id in known:
         if protocol not in ("auto", CHOICE_PROTOCOL):

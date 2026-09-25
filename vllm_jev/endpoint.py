@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from vllm import PoolingParams
 from vllm.entrypoints.serve.utils.api_utils import load_aware_call, with_cancellation
 
+from . import QWEN3_PROJECTED_ARCHITECTURE
 from .prompt import (
     branch_token_ids,
     candidate_prompts,
@@ -67,6 +68,7 @@ class _JevService:
         temperatures: dict[str, float] | None = None,
         head: tuple[Any, Any] | None = None,
         marker: tuple[str, str] = (" - correct?", "<opt>"),
+        projected_token_scores: bool = False,
     ):
         self.engine_client = engine_client
         self.tokenizer = tokenizer
@@ -80,6 +82,7 @@ class _JevService:
         }
         self.head = head
         self.marker = marker
+        self.projected_token_scores = projected_token_scores
 
     async def _encode(
         self,
@@ -102,7 +105,9 @@ class _JevService:
                     pooling_params=PoolingParams(
                         task=task,
                         use_activation=False,
-                        skip_reading_prefix_cache=True if not use_prefix_cache else None,
+                        skip_reading_prefix_cache=True
+                        if not use_prefix_cache
+                        else None,
                     ),
                     request_id=request_id,
                     priority=priority,
@@ -143,6 +148,14 @@ class _JevService:
 
         # vLLM skips cache reads for token_embed to return every token's state.
         final = await self._encode(ids, salt, use_prefix_cache, priority, "token_embed")
+        if self.projected_token_scores:
+            scores = torch.as_tensor(final.outputs.data).reshape(-1)
+            if scores.numel() == len(ids):
+                return (
+                    scores[positions].float().tolist(),
+                    int(final.num_cached_tokens),
+                    len(final.prompt_token_ids),
+                )
         weight, bias = self.head
         hidden = torch.as_tensor(final.outputs.data).reshape(-1, weight.shape[1])
         if hidden.shape[0] != len(ids):
@@ -504,6 +517,12 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            valen = getattr(raw_request.app.state, "vllm_valen_service", None)
+            if valen is not None:
+                try:
+                    return await valen.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             service = getattr(raw_request.app.state, "vllm_jev_service", None)
             if service is None:
                 raise HTTPException(status_code=503, detail="Jev engine unavailable")
@@ -514,6 +533,23 @@ class JevEndpointPlugin:
 
     async def init_state(self, engine_client, state, args) -> None:
         state.vllm_jev_service = None
+        state.vllm_valen_service = None
+        if (
+            engine_client is not None
+            and (Path(args.model) / "valen_manifest.json").is_file()
+        ):
+            from .valen import ValenService
+
+            model_id = getattr(args, "served_model_name", None) or "Valen"
+            if isinstance(model_id, list):
+                model_id = model_id[0]
+            state.vllm_valen_service = ValenService(
+                engine_client,
+                Path(args.model),
+                model_id,
+                getattr(args, "max_model_len", 8192),
+            )
+            return
         manifest = Path(args.model) / "jev_manifest.json"
         if engine_client is None or not manifest.is_file():
             return
@@ -528,6 +564,10 @@ class JevEndpointPlugin:
         temperatures = data.get("calibration_temperatures")
         head = None
         marker = (" - correct?", "<opt>")
+        projected_token_scores = (
+            protocol == "tiny_jev_marker"
+            and data.get("architecture") == QWEN3_PROJECTED_ARCHITECTURE
+        )
         if (
             not isinstance(default_temperature, (int, float))
             or not math.isfinite(default_temperature)
@@ -551,7 +591,8 @@ class JevEndpointPlugin:
 
             config = json.loads((Path(args.model) / "config.json").read_text())
             tensors = load_file(str(Path(args.model) / "score.safetensors"))
-            head = (tensors["weight"], tensors["bias"])
+            prefix = "score." if projected_token_scores else ""
+            head = (tensors[prefix + "weight"], tensors[prefix + "bias"])
             marker = (config.get("cue", marker[0]), config.get("opt_token", marker[1]))
         state.vllm_jev_service = _JevService(
             engine_client,
@@ -563,4 +604,5 @@ class JevEndpointPlugin:
             temperatures,
             head,
             marker,
+            projected_token_scores,
         )
