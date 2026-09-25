@@ -109,9 +109,9 @@ For image questions, start `vllm-jev serve Valen-Team/Valen-Preview-0923` and fo
 
 ### 2026-09-25
 
-- Added native vLLM inference for the Valen preview: text/image Choice, Noul, and Score requests, with automatic download and checkpoint preparation. Training is not part of serving.
-- Added an optional fused decision head for Tiny-Jev. On the measured 16-option, concurrency-16 workload it increased throughput by **12.1%**; shorter 4-option requests were roughly unchanged.
-- On 500 Valen image questions, sequential median latency fell from **231.9 to 77.3 ms** (**3.0×**), while target-support accuracy was **86.8%** for both paths. The selected choice agreed on **98.8%** of questions. These are results for this model and workload, not a general speed claim; probability values are not identical to the author's runtime. See [measurement notes](docs/guide.md#2026-09-25).
+- Added one-command Valen Preview serving for text and image Choice, Noul, and Score requests.
+- Added a fused Tiny-Jev head: **12.1% higher throughput** in the measured 16-option, 16-concurrent workload.
+- On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Measurement notes](docs/guide.md#2026-09-25).
 
 ## Inference performance
 
