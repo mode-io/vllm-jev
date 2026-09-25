@@ -98,9 +98,9 @@ For image questions, start `vllm-jev serve Valen-Team/Valen-Preview-0923` and fo
 - Added an optional fused decision head for Tiny-Jev. On the measured 16-option, concurrency-16 workload it increased throughput by **12.1%**; shorter 4-option requests were roughly unchanged.
 - On 500 Valen image questions, sequential median latency fell from **231.9 to 77.3 ms** (**3.0×**), while target-support accuracy was **86.8%** for both paths. The selected choice agreed on **98.8%** of questions. These are results for this model and workload, not a general speed claim; probability values are not identical to the author's runtime. See [measurement notes](docs/guide.md#2026-09-25).
 
-## Hosted inference performance
+## Inference performance
 
-Each row uses the same model, input, and GPU for both endpoints. Lower latency and higher throughput are better. Measured on one A800 GPU
+Each row uses the same model, input, and A800 GPU for both paths. Lower latency and higher throughput are better. Valen uses sequential offline inference; the other rows compare hosted endpoints.
 
 Paired values: **Without vLLM Jev → With vLLM Jev**.
 
@@ -122,10 +122,9 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 | [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev)² | Short | 8 | 216.9 → 28.8 | 222.0 → 45.7 | 36.61 → 254.99 | 7.5× | 7.0× |
 | [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev)² | Long | 1 | 28.4 → 11.5 | 30.1 → 12.4 | 34.59 → 85.70 | 2.5× | 2.5× |
 | [Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev)² | Long | 8 | 223.0 → 43.3 | 224.3 → 59.7 | 35.75 → 179.94 | 5.1× | 5.0× |
+| [Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923)³ | Image | 1 | 231.9 → 77.3 | 240.2 → 82.0 | 4.30 → 12.90 | 3.0× | 3.0× |
 
-
-
-¹ The 0.6B baseline used the author's scorer on CUDA. ² Tiny-Jev used a serialized HTTP wrapper around its Python API. Gains include serving and batching.
+¹ The 0.6B baseline used the author's scorer on CUDA. ² Tiny-Jev used a serialized HTTP wrapper around its Python API; gains include serving and batching. ³ Valen compares the author's runtime with native vLLM offline inference on the same 500 image questions, one request at a time. Both reached 86.8% target-support accuracy; these figures do not include HTTP overhead.
 
 ## Contributing
 
