@@ -147,7 +147,7 @@ This release adds Valen text/image inference and a fused Tiny-Jev decision head.
 
 For 500 image questions from the Valen evaluation game on one A800, the author's sequential inference and vLLM Jev used the same model weights and inputs:
 
-| Measurement | Author runtime | vLLM Jev |
+| Measurement | No vLLM Jev | vLLM Jev |
 |---|---:|---:|
 | Median latency | 231.9 ms | 77.3 ms |
 | P95 latency | 240.2 ms | 82.0 ms |
@@ -155,3 +155,5 @@ For 500 image questions from the Valen evaluation game on one A800, the author's
 | Target-support accuracy | 86.8% | 86.8% |
 
 The selected choice matched on 494/500 questions (98.8%). Probability outputs have numerical differences: median maximum per-question probability difference was small, but the worst was about 0.295. Accuracy on this set therefore does not imply exact probability equivalence. An HTTP run at eight concurrent requests completed 500/500 requests with 40.6 req/s and 193.4 ms median latency. The fused Tiny-Jev head improved the measured 16-option, concurrency-16 throughput by 12.1%; four-option requests were roughly flat.
+
+“No vLLM Jev” in the table uses Valen's author runtime.
