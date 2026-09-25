@@ -9,12 +9,21 @@
 
 <p align="center">
   <a href="docs/guide.md"><b>Documentation</b></a> ·
+  <a href="#demos"><b>Demos</b></a> ·
   <a href="#getting-started"><b>Getting Started</b></a> ·
   <a href="#example"><b>Example</b></a> ·
   <a href="#updates"><b>Updates</b></a>
 </p>
 
 ---
+
+## Demos
+
+### Multimodal: live Sokoban
+
+![Five live Valen Sokoban games: No vLLM Jev and vLLM Jev](docs/assets/valen-sokoban-five-live.gif)
+
+Both runtimes played the same five levels from [Valen's Sokoban evaluation set](https://huggingface.co/datasets/Valen-Team/Valen-Eval-Game) with the same checkpoint and one A800 each. Every board move followed an **actual model response** while the video was captured. Both completed all 22 moves: **5.32 s** without vLLM Jev (using the [author's runtime](https://github.com/Liuziyu77/Valen)) and **1.69 s** with vLLM Jev (**3.2×**). These are warm HTTP runs; model loading is excluded. [Watch the MP4](docs/assets/valen-sokoban-five-live.mp4) · [Author's original game demos](https://github.com/Liuziyu77/Valen#-demos)
 
 ## About
 
@@ -23,7 +32,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Native vLLM serving:** scheduling, batching, compilation, KV cache, and metrics.
 - **Native decision readouts:** scalar candidate branches or marker-token scores, selected from the model format.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Image-aware decisions:** the Valen preview accepts text and images through the same System One API.
+- **Multimodal inference:** the Valen preview accepts text and images through the same System One API.
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
@@ -89,12 +98,6 @@ The response contains `answers.intent.choice` and `answers.intent.probabilities`
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
 For image questions, start `vllm-jev serve Valen-Team/Valen-Preview-0923` and follow the [Valen example](docs/guide.md#text-and-image-with-valen). This preview supports text and images; video input is not yet supported here.
-
-## Sokoban live inference
-
-![Five live Valen Sokoban games: author runtime and vLLM Jev](docs/assets/valen-sokoban-five-live.gif)
-
-Both runtimes played the same five levels from [Valen's Sokoban evaluation set](https://huggingface.co/datasets/Valen-Team/Valen-Eval-Game) with the same checkpoint and one A800 each. Every board move followed an **actual model response** while the video was captured. Both completed all 22 moves: **5.32 s** without vLLM Jev (using the [author's runtime](https://github.com/Liuziyu77/Valen)) and **1.69 s** with vLLM Jev (**3.2×**). These are warm HTTP runs; model loading is excluded. [Watch the MP4](docs/assets/valen-sokoban-five-live.mp4) · [Author's original game demos](https://github.com/Liuziyu77/Valen#-demos)
 
 ## Updates
 
