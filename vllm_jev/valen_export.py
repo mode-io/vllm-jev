@@ -12,7 +12,7 @@ from torch import nn
 from transformers import Qwen3_5ForConditionalGeneration
 
 from . import VALEN_QWEN35_ARCHITECTURE
-from .checkpoint import sha256
+from .checkpoint import sha256, verify_files
 
 MODEL_ID = "Valen-Team/Valen-Preview-0923"
 MODEL_REVISION = "91a9d3e79fcdf75d233994c1a05296ad569d0ff4"
@@ -169,6 +169,21 @@ def verify_valen(path: Path, *, full: bool = True) -> dict:
     config = json.loads((path / "config.json").read_text())
     if config.get("architectures") != [VALEN_QWEN35_ARCHITECTURE]:
         raise ValueError("Valen model architecture mismatch")
+    index = json.loads((path / "model.safetensors.index.json").read_text())
+    checked_files = verify_files(
+        path,
+        manifest,
+        index,
+        (
+            "config.json",
+            "model.safetensors.index.json",
+            "valen_head.safetensors",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "preprocessor_config.json",
+        ),
+        full=full,
+    )
     with safe_open(
         path / "valen_head.safetensors", framework="pt", device="cpu"
     ) as file:
@@ -176,26 +191,21 @@ def verify_valen(path: Path, *, full: bool = True) -> dict:
             raise ValueError("invalid Valen decision head")
         if file.get_tensor("candidate.weight").shape != (256, 2048):
             raise ValueError("invalid Valen candidate head")
-    index = json.loads((path / "model.safetensors.index.json").read_text())
+        if any(
+            not torch.isfinite(file.get_tensor(name)).all()
+            for name in ("decision.weight", "candidate.weight")
+        ):
+            raise ValueError("nonfinite Valen head")
     if not any(name.startswith("model.visual.") for name in index["weight_map"]):
         raise ValueError("Valen visual weights missing")
     if not any(
         name.startswith("model.language_model.") for name in index["weight_map"]
     ):
         raise ValueError("Valen language weights missing")
-    names = (
-        list(manifest["files"])
-        if full
-        else ["config.json", "model.safetensors.index.json", "valen_head.safetensors"]
-    )
-    for name in names:
-        file = path / name
-        if not file.is_file() or sha256(file) != manifest["files"].get(name):
-            raise ValueError(f"Valen checkpoint checksum mismatch: {name}")
     return {
         "format": manifest["format"],
         "architecture": VALEN_QWEN35_ARCHITECTURE,
         "foundation_revision": BASE_REVISION,
-        "checked_files": len(names),
+        "checked_files": checked_files,
         "full": full,
     }

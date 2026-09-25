@@ -25,20 +25,28 @@ def _load_image(value):
         ("data:image/png;base64,", "data:image/jpeg;base64,")
     ):
         raise ValueError("Valen images must be PNG/JPEG data URLs")
+    encoded = value.split(",", 1)[1]
+    if len(encoded) > 4 * math.ceil(8 * 1024 * 1024 / 3):
+        raise ValueError("image exceeds 8 MiB")
     try:
-        raw = base64.b64decode(value.split(",", 1)[1], validate=True)
+        raw = base64.b64decode(encoded, validate=True)
         if len(raw) > 8 * 1024 * 1024:
             raise ValueError("image exceeds 8 MiB")
-        image = Image.open(io.BytesIO(raw))
-        image.load()
-        return image.convert("RGB")
-    except (ValueError, OSError, binascii.Error) as error:
+        with Image.open(io.BytesIO(raw)) as image:
+            if image.format not in {"PNG", "JPEG"}:
+                raise ValueError("Valen images must be PNG or JPEG")
+            if image.width * image.height > Image.MAX_IMAGE_PIXELS:
+                raise ValueError("Valen image exceeds the pixel limit")
+            return image.convert("RGB")
+    except (ValueError, OSError, binascii.Error, Image.DecompressionBombError) as error:
         raise ValueError("invalid Valen image") from error
 
 
 def _candidates(question):
     kind = question.get("type")
     if kind == "noul":
+        if question.get("criteria") is not None:
+            raise ValueError("Valen Noul uses fixed true/false criteria")
         return [
             ("true", "True / 是：满足问题中的条件。"),
             ("false", "False / 否：不满足问题中的条件。"),
@@ -61,6 +69,8 @@ def _candidates(question):
 
 
 def _answer(kind, keys, descriptions, logits, temperature=1.0):
+    if not all(math.isfinite(score) for score in logits):
+        raise RuntimeError("Valen returned nonfinite decision scores")
     scores = torch.tensor(logits, dtype=torch.float32)
     probs = (scores / temperature).softmax(-1).tolist()
     total = sum(probs)
@@ -90,7 +100,14 @@ def _answer(kind, keys, descriptions, logits, temperature=1.0):
 
 
 class ValenService:
-    def __init__(self, engine_client, model_path: Path, model_id: str, max_length: int):
+    def __init__(
+        self,
+        engine_client,
+        model_path: Path,
+        model_id: str | list[str],
+        max_length: int,
+        max_inflight: int = 128,
+    ):
         self.engine_client = engine_client
         self.processor = AutoProcessor.from_pretrained(
             model_path, local_files_only=True
@@ -98,9 +115,10 @@ class ValenService:
         self.tokenizer = self.processor.tokenizer
         self.image_pad_id = self.tokenizer.convert_tokens_to_ids("<|image_pad|>")
         self.weights = load_file(str(model_path / "valen_head.safetensors"))
-        self.model_id = model_id
+        self.model_names = [model_id] if isinstance(model_id, str) else model_id
+        self.model_id = self.model_names[0]
         self.max_length = max_length
-        self.semaphore = asyncio.Semaphore(128)
+        self.semaphore = asyncio.Semaphore(max_inflight)
         self.media_kwargs = json.loads(
             (model_path / "valen_manifest.json").read_text()
         ).get("media_kwargs", {})
@@ -109,20 +127,39 @@ class ValenService:
         if isinstance(state, str):
             messages = [{"role": "user", "content": [{"type": "text", "text": state}]}]
         elif isinstance(state, dict) and isinstance(state.get("messages"), list):
+            if not state["messages"]:
+                raise ValueError("Valen messages must be nonempty")
             messages = []
             for message in state["messages"]:
-                content = message["content"]
+                if (
+                    not isinstance(message, dict)
+                    or not isinstance(message.get("role"), str)
+                    or not message["role"]
+                ):
+                    raise ValueError("Valen messages require a text role")
+                content = message.get("content")
                 if isinstance(content, str):
                     content = [{"type": "text", "text": content}]
+                if not isinstance(content, list) or not content:
+                    raise ValueError(
+                        "Valen message content must be text or a nonempty list"
+                    )
                 rendered = []
                 for item in content:
-                    if item["type"] == "text":
-                        rendered.append(item)
-                    elif item["type"] == "image_url":
+                    if not isinstance(item, dict):
+                        raise ValueError("Valen content items must be objects")
+                    if item.get("type") == "text":
+                        if not isinstance(item.get("text"), str):
+                            raise ValueError("Valen text content must be a string")
+                        rendered.append({"type": "text", "text": item["text"]})
+                    elif item.get("type") == "image_url":
+                        image_url = item.get("image_url")
+                        if not isinstance(image_url, dict):
+                            raise ValueError("Valen image_url must contain a data URL")
                         rendered.append(
                             {
                                 "type": "image",
-                                "image": _load_image(item["image_url"]["url"]),
+                                "image": _load_image(image_url.get("url")),
                             }
                         )
                     else:
@@ -147,16 +184,29 @@ class ValenService:
         return base["input_ids"].flatten().tolist(), images
 
     def _compile(self, payload):
-        base_ids, images = self._state(payload.state)
-        questions = []
-        logical_tokens = len(base_ids)
-        compute_tokens = 0
+        if payload.model not in (None, "vllm-jev", *self.model_names):
+            raise ValueError("requested model is not loaded")
+        if not 1 <= len(payload.questions) <= 64:
+            raise ValueError("System One requires 1 to 64 questions")
+        prepared = []
+        candidate_count = 0
         for identifier, question in payload.questions.items():
+            if not identifier or not isinstance(question, dict):
+                raise ValueError("question IDs and definitions must be nonempty")
             kind = question.get("type")
             instructions = question.get("instructions")
             if not isinstance(instructions, str) or not instructions.strip():
                 raise ValueError("Valen instructions must be nonempty text")
             pairs = _candidates(question)
+            candidate_count += len(pairs)
+            prepared.append((identifier, kind, instructions, pairs))
+        if candidate_count > 256:
+            raise ValueError("System One exceeds 256 candidates")
+        base_ids, images = self._state(payload.state)
+        questions = []
+        logical_tokens = len(base_ids)
+        compute_tokens = 0
+        for identifier, kind, instructions, pairs in prepared:
             groups = [[pair] for pair in pairs] if kind == "score" else [pairs]
             branches = []
             for group in groups:
@@ -215,9 +265,18 @@ class ValenService:
                 final = None
                 async for output in outputs:
                     final = output
-                if final is None or final.prompt_token_ids != full_ids:
+                if final is None or not final.finished:
+                    raise RuntimeError("vLLM returned no final pooling result")
+                if final.prompt_token_ids != full_ids:
                     raise RuntimeError("vLLM tokenization differs from Valen protocol")
                 hidden = torch.as_tensor(final.outputs.data)
+                if hidden.ndim != 2 or hidden.shape != (
+                    len(full_ids),
+                    self.weights["candidate.weight"].shape[1],
+                ):
+                    raise RuntimeError(
+                        "vLLM returned an incomplete token embedding sequence"
+                    )
                 candidate = functional.linear(
                     hidden[positions].float(), self.weights["candidate.weight"]
                 )
@@ -233,16 +292,16 @@ class ValenService:
                         await self.engine_client.abort(request_id)
 
     async def systemone(self, payload):
+        from .endpoint import _gather_cancel_on_error
+
         started = time.perf_counter()
         questions, images, logical_tokens, compute_tokens = self._compile(payload)
         salt = secrets.token_hex(16)
         answers = {}
         for identifier, kind, pairs, branches in questions:
-            logits_per_branch = await asyncio.gather(
-                *(
-                    self._score(ids, positions, decision, images, salt)
-                    for ids, positions, decision in branches
-                )
+            logits_per_branch = await _gather_cancel_on_error(
+                self._score(ids, positions, decision, images, salt)
+                for ids, positions, decision in branches
             )
             logits = [
                 score for branch_scores in logits_per_branch for score in branch_scores

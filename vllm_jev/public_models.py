@@ -7,6 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from filelock import FileLock
 from huggingface_hub import snapshot_download
 
 from .checkpoint import sha256, verify
@@ -49,6 +50,14 @@ def resolve_profile(name: str) -> str:
 
 def prepare(profile: str, workspace: Path) -> Path:
     profile = resolve_profile(profile)
+    workspace = workspace.resolve()
+    output = workspace / "checkpoint" / PROFILES[profile][0]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with FileLock(str(output) + ".lock"):
+        return _prepare(profile, workspace)
+
+
+def _prepare(profile: str, workspace: Path) -> Path:
     adapter_id, adapter_revision, base_id, base_revision = PROFILES[profile]
     adapter_hash, head_hash, temperature_hash = RELEASE_HASHES[profile]
     workspace = workspace.resolve()

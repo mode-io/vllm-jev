@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/Open-Jev-MIT.txt"]
-dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors", "huggingface_hub>=0.34,<2"]
+dependencies = ["vllm==0.29.0", "transformers>=5.10,<5.11", "peft>=0.20,<0.21", "safetensors", "filelock", "huggingface_hub>=0.34,<2"]
 
 [project.scripts]
 vllm-jev = "vllm_jev.cli:main"

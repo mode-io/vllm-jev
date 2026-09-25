@@ -14,4 +14,4 @@ fi
 uv pip install --python "$workspace/runtime/bin/python" \
   vllm==0.29.0 transformers==5.10.4 peft==0.20.0
 uv pip install --python "$workspace/runtime/bin/python" \
-  --no-deps --no-build-isolation -e "$repo_root"
+  --no-deps -e "$repo_root"

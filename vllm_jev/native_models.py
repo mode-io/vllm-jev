@@ -8,6 +8,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+from filelock import FileLock
 from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import validate_repo_id
 
@@ -72,6 +73,20 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         "valen_qwen_v1",
     ):
         raise ValueError(f"unknown protocol: {protocol}")
+    known = {spec[0]: name for name, spec in PROFILES.items()}
+    if model_id in known:
+        if protocol not in ("auto", CHOICE_PROTOCOL):
+            raise ValueError(f"{model_id} uses {CHOICE_PROTOCOL}, not {protocol}")
+        return prepare_open_jev(known[model_id], workspace)
+
+    workspace = workspace.resolve()
+    output = workspace / "checkpoint" / model_id
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with FileLock(str(output) + ".lock"):
+        return _prepare(model_id, workspace, protocol)
+
+
+def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
     from .valen_export import MODEL_ID as VALEN_ID
 
     if model_id == VALEN_ID:
@@ -121,11 +136,6 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
             if temporary.exists():
                 shutil.rmtree(temporary)
         return output
-    known = {spec[0]: name for name, spec in PROFILES.items()}
-    if model_id in known:
-        if protocol not in ("auto", CHOICE_PROTOCOL):
-            raise ValueError(f"{model_id} uses {CHOICE_PROTOCOL}, not {protocol}")
-        return prepare_open_jev(known[model_id], workspace)
 
     workspace = workspace.resolve()
     output = workspace / "checkpoint" / model_id
@@ -297,7 +307,13 @@ def main() -> None:
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument(
         "--protocol",
-        choices=("auto", CHOICE_PROTOCOL, BRANCH_PROTOCOL, TINY_PROTOCOL),
+        choices=(
+            "auto",
+            CHOICE_PROTOCOL,
+            BRANCH_PROTOCOL,
+            TINY_PROTOCOL,
+            "valen_qwen_v1",
+        ),
         default="auto",
     )
     args = parser.parse_args()

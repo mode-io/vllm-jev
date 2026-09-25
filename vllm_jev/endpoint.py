@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+import os
 import secrets
 import time
 import uuid
@@ -262,6 +263,8 @@ class _JevService:
             enable_thinking=False,
         )
         score, cached, tokens = await self._one_score(prompt, salt, True, 0)
+        if not math.isfinite(score):
+            raise RuntimeError("vLLM returned a nonfinite decision score")
         scaled = score / self.temperatures["noul"]
         probability = (
             1 / (1 + math.exp(-scaled))
@@ -329,7 +332,7 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
             if criteria is not None:
                 if not isinstance(criteria, dict) or set(criteria) != {"true", "false"}:
                     raise ValueError("Noul criteria must define true and false")
-                if service.protocol == "open_jev_choice":
+                if service.protocol in ("open_jev_choice", "tiny_jev_marker"):
                     question += (
                         f"\nYes means: {describe(criteria['true'])}"
                         f"\nNo means: {describe(criteria['false'])}"
@@ -534,30 +537,27 @@ class JevEndpointPlugin:
     async def init_state(self, engine_client, state, args) -> None:
         state.vllm_jev_service = None
         state.vllm_valen_service = None
-        if (
-            engine_client is not None
-            and (Path(args.model) / "valen_manifest.json").is_file()
+        manifest = Path(args.model) / "jev_manifest.json"
+        valen_manifest = Path(args.model) / "valen_manifest.json"
+        if engine_client is None or not (
+            manifest.is_file() or valen_manifest.is_file()
         ):
+            return
+        max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
+        if max_inflight < 1:
+            raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
+        if valen_manifest.is_file():
             from .valen import ValenService
 
             model_id = getattr(args, "served_model_name", None) or "Valen"
-            if isinstance(model_id, list):
-                model_id = model_id[0]
             state.vllm_valen_service = ValenService(
                 engine_client,
                 Path(args.model),
                 model_id,
-                getattr(args, "max_model_len", 8192),
+                engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
             )
             return
-        manifest = Path(args.model) / "jev_manifest.json"
-        if engine_client is None or not manifest.is_file():
-            return
-        import os
-
-        max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
-        if max_inflight < 1:
-            raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
         data = json.loads(manifest.read_text())
         default_temperature = data.get("calibration_temperature", 1.0)
         protocol = data.get("prompt_protocol", "open_jev_choice")
