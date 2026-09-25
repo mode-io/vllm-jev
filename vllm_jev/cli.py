@@ -42,6 +42,7 @@ def main() -> None:
             "openjev_branch_v03",
             "tiny_jev_marker",
             "valen_qwen_v1",
+            "vjev_vision_v1",
         ),
         default="auto",
         help="Checkpoint protocol (default: auto).",
@@ -62,9 +63,14 @@ def main() -> None:
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
         valen_manifest = checkpoint / "valen_manifest.json"
+        vjev_manifest = checkpoint / "vjev_manifest.json"
         model_id = (
-            json.loads(valen_manifest.read_text())["source_repository"]
-            if valen_manifest.is_file()
+            json.loads(
+                (
+                    vjev_manifest if vjev_manifest.is_file() else valen_manifest
+                ).read_text()
+            )["source_repository"]
+            if vjev_manifest.is_file() or valen_manifest.is_file()
             else "vllm-jev"
         )
         prepare = ["-m", "vllm_jev.checkpoint", "--model", str(checkpoint), "--quick"]
@@ -88,9 +94,17 @@ def main() -> None:
     except subprocess.CalledProcessError as error:
         raise SystemExit(error.returncode) from None
     valen_manifest = checkpoint / "valen_manifest.json"
+    vjev_manifest = checkpoint / "vjev_manifest.json"
     is_valen = valen_manifest.is_file()
+    is_vjev = vjev_manifest.is_file()
     if args.protocol != "auto":
-        manifest_path = valen_manifest if is_valen else checkpoint / "jev_manifest.json"
+        manifest_path = (
+            vjev_manifest
+            if is_vjev
+            else valen_manifest
+            if is_valen
+            else checkpoint / "jev_manifest.json"
+        )
         manifest = json.loads(manifest_path.read_text())
         if manifest.get("prompt_protocol", "open_jev_choice") != args.protocol:
             parser.error("requested protocol differs from the prepared checkpoint")
@@ -101,7 +115,7 @@ def main() -> None:
         "--mamba-ssm-cache-dtype float32 --async-scheduling "
         "--gpu-memory-utilization 0.9 --host 127.0.0.1 --port 8795"
     ).split()
-    if is_valen:
+    if is_valen or is_vjev:
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,

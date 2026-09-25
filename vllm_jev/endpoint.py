@@ -520,6 +520,12 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            vjev = getattr(raw_request.app.state, "vllm_vjev_service", None)
+            if vjev is not None:
+                try:
+                    return await vjev.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             valen = getattr(raw_request.app.state, "vllm_valen_service", None)
             if valen is not None:
                 try:
@@ -537,15 +543,28 @@ class JevEndpointPlugin:
     async def init_state(self, engine_client, state, args) -> None:
         state.vllm_jev_service = None
         state.vllm_valen_service = None
+        state.vllm_vjev_service = None
         manifest = Path(args.model) / "jev_manifest.json"
         valen_manifest = Path(args.model) / "valen_manifest.json"
+        vjev_manifest = Path(args.model) / "vjev_manifest.json"
         if engine_client is None or not (
-            manifest.is_file() or valen_manifest.is_file()
+            manifest.is_file() or valen_manifest.is_file() or vjev_manifest.is_file()
         ):
             return
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
         if max_inflight < 1:
             raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
+        if vjev_manifest.is_file():
+            from .vjev import VjevService
+
+            state.vllm_vjev_service = VjevService(
+                engine_client,
+                Path(args.model),
+                getattr(args, "served_model_name", None) or "vjev",
+                engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
+            )
+            return
         if valen_manifest.is_file():
             from .valen import ValenService
 

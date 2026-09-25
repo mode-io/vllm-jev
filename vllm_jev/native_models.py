@@ -71,6 +71,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         BRANCH_PROTOCOL,
         TINY_PROTOCOL,
         "valen_qwen_v1",
+        "vjev_vision_v1",
     ):
         raise ValueError(f"unknown protocol: {protocol}")
     known = {spec[0]: name for name, spec in PROFILES.items()}
@@ -87,6 +88,46 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
 
 
 def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
+    from .vjev_export import REVISIONS as VJEV_REVISIONS
+
+    if model_id in VJEV_REVISIONS:
+        if protocol not in ("auto", "vjev_vision_v1"):
+            raise ValueError(f"{model_id} uses vjev_vision_v1, not {protocol}")
+        from .vjev_export import export_vjev, verify_vjev
+
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            verify_vjev(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=VJEV_REVISIONS[model_id],
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model-*.safetensors",
+                    "model.safetensors.index.json",
+                    "config.json",
+                    "tokenizer*.json",
+                    "processor_config.json",
+                    "chat_template.jinja",
+                    "generation_config.json",
+                    "head.pt",
+                    "vjev.json",
+                ],
+            )
+        )
+        temporary = Path(tempfile.mkdtemp(prefix=".vjev-", dir=output.parent))
+        try:
+            export_vjev(source, temporary, model_id)
+            verify_vjev(temporary, full=True)
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+        return output
+
     from .valen_export import MODEL_ID as VALEN_ID
 
     if model_id == VALEN_ID:
@@ -313,6 +354,7 @@ def main() -> None:
             BRANCH_PROTOCOL,
             TINY_PROTOCOL,
             "valen_qwen_v1",
+            "vjev_vision_v1",
         ),
         default="auto",
     )

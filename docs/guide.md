@@ -37,8 +37,10 @@ Input support depends on the model:
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | `vllm-jev serve IamBusy/OpenJev-0.6B` |
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | `vllm-jev serve lostargon/Tiny-Jev` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | `vllm-jev serve yah01/vjev-vision` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | `vllm-jev serve yah01/vjev-vision-pilot` |
 
-Valen's image requests use `/v1/systemone`. Video input is not supported by this adapter yet.
+Image requests use `/v1/systemone`. The vjev pilot is an earlier vision checkpoint; use `yah01/vjev-vision` by default. Video input is not supported by these adapters yet.
 
 ## Serving options
 
@@ -60,7 +62,7 @@ Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the
 | `POST /plugins/vllm-jev/batch` | Ask several multiple-choice questions together. |
 | `POST /v1/systemone` | Ask Choice, Noul (yes/no), or Score questions about a shared state. |
 
-Valen uses `/v1/systemone` for text and image requests. The two `/plugins/vllm-jev/*` routes are for the four text models.
+Valen and vjev use `/v1/systemone` for text and image requests. The two `/plugins/vllm-jev/*` routes are for the four text models.
 
 Noul and Score use `/v1/systemone` with a question `type`. They do not have separate URLs. The native vLLM `/classify` and `/pooling` routes remain available for raw model outputs.
 
@@ -140,6 +142,8 @@ print(json.load(response)["answers"]["color"])
 ```
 
 The answer contains `choice`, `confidence`, and `probabilities`. Valen also accepts Noul and Score questions through this route. Its current adapter supports text and images; video is not yet supported.
+
+The same request body works with `vllm-jev serve yah01/vjev-vision` or `vllm-jev serve yah01/vjev-vision-pilot`. Both vjev checkpoints use a trained vision readout and support text-only requests too. They accept multiple images; the author trained these checkpoints on single images, so evaluate multi-image answers for your task. Probabilities may differ slightly from the author's inference runtime.
 
 ## Updates
 

@@ -63,6 +63,10 @@ def verify_files(
 
 def verify(path: Path, *, full: bool = True) -> dict:
     path = path.resolve()
+    if (path / "vjev_manifest.json").is_file():
+        from .vjev_export import verify_vjev
+
+        return verify_vjev(path, full=full)
     if (path / "valen_manifest.json").is_file():
         from .valen_export import verify_valen
 

@@ -59,6 +59,12 @@ class VllmValenQwen35ForTokenEmbedding(
     """Native Qwen3.5 token states for Valen's shared decision head."""
 
 
+class VllmVjevQwen35ForTokenEmbedding(
+    as_embedding_model(Qwen3_5ForConditionalGeneration)
+):
+    """Native Qwen3.5 image/text token states for vjev's listwise head."""
+
+
 class VllmJevQwen3ForTokenEmbedding(as_embedding_model(Qwen3ForCausalLM)):
     """Native Qwen3 token embeddings for marker-position decision heads."""
 

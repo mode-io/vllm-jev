@@ -7,6 +7,7 @@ QWEN3_ARCHITECTURE = "VllmJevQwen3ForSequenceClassification"
 QWEN3_TOKEN_ARCHITECTURE = "VllmJevQwen3ForTokenEmbedding"
 QWEN3_PROJECTED_ARCHITECTURE = "VllmJevQwen3ForTokenScoreEmbedding"
 VALEN_QWEN35_ARCHITECTURE = "VllmValenQwen35ForTokenEmbedding"
+VJEV_QWEN35_ARCHITECTURE = "VllmVjevQwen35ForTokenEmbedding"
 
 
 def register() -> None:
@@ -19,5 +20,6 @@ def register() -> None:
         QWEN3_TOKEN_ARCHITECTURE,
         QWEN3_PROJECTED_ARCHITECTURE,
         VALEN_QWEN35_ARCHITECTURE,
+        VJEV_QWEN35_ARCHITECTURE,
     ):
         ModelRegistry.register_model(architecture, f"vllm_jev.model:{architecture}")
