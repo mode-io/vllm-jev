@@ -23,13 +23,13 @@
 
 ![Five live Valen Sokoban games: No vLLM Jev and vLLM Jev](docs/assets/valen-sokoban-five-live.gif)
 
-Both runtimes played the same five levels from [Valen's Sokoban evaluation set](https://huggingface.co/datasets/Valen-Team/Valen-Eval-Game) with the same checkpoint and one A800 each. Every board move followed an **actual model response** while the video was captured. Both completed all 22 moves: **5.32 s** without vLLM Jev (using the [author's runtime](https://github.com/Liuziyu77/Valen)) and **1.69 s** with vLLM Jev (**3.2×**). These are warm HTTP runs; model loading is excluded. [Watch the MP4](docs/assets/valen-sokoban-five-live.mp4) · [Author's original game demos](https://github.com/Liuziyu77/Valen#-demos)
+Both runtimes played the same five levels from [Valen's Sokoban evaluation set](https://huggingface.co/datasets/Valen-Team/Valen-Eval-Game) with the same checkpoint and one A800 each.
 
 ### Text: 40 concurrent decisions
 
 ![Live Open-Jev-2B text decisions: No vLLM Jev and vLLM Jev](docs/assets/open-jev-2b-parallel-text-live.gif)
 
-The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP server and vLLM Jev received the same 40 text-only Choice requests at once, on one A800 each. Both returned all 40 decisions with identical selected labels. The live run finished in **5.71 s** without vLLM Jev and **0.54 s** with vLLM Jev (**10.6×**). Model loading is excluded; this demo shows the benefit of vLLM's concurrent scheduling for this workload. [Watch the MP4](docs/assets/open-jev-2b-parallel-text-live.mp4)
+The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP server and vLLM Jev received the same 40 text-only Choice requests at once, on one A800 each.
 
 ## About
 
