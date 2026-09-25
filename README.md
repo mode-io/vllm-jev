@@ -90,6 +90,12 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 
 For image questions, start `vllm-jev serve Valen-Team/Valen-Preview-0923` and follow the [Valen example](docs/guide.md#text-and-image-with-valen). This preview supports text and images; video input is not yet supported here.
 
+## Sokoban live inference
+
+![Live Valen Sokoban inference: author runtime and vLLM Jev](docs/assets/valen-sokoban-live.gif)
+
+Both runtimes played the same six-step level from [Valen's Sokoban evaluation set](https://huggingface.co/datasets/Valen-Team/Valen-Eval-Game) with the same checkpoint and one A800 each. Every board move followed an **actual model response** while the video was captured. Both solved the level: **1.42 s** with the [author's runtime](https://github.com/Liuziyu77/Valen) and **0.46 s** with vLLM Jev (**3.1×**). These are warm HTTP runs; model loading is excluded. [Watch the MP4](docs/assets/valen-sokoban-live.mp4) · [Author's original game demos](https://github.com/Liuziyu77/Valen#-demos)
+
 ## Updates
 
 ### 2026-09-25
