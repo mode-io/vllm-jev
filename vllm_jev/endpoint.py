@@ -133,7 +133,10 @@ class _JevService:
         priority: int,
     ) -> tuple[float, int, int]:
         final = await self._encode(prompt, cache_salt, use_prefix_cache, priority)
-        scalar = float(final.outputs.data.reshape(-1)[0])
+        values = final.outputs.data.reshape(-1)
+        if len(values) != 1:
+            raise RuntimeError("vLLM returned an invalid scalar decision head")
+        scalar = float(values[0])
         return scalar, int(final.num_cached_tokens), len(final.prompt_token_ids)
 
     async def _token_scores(
@@ -228,6 +231,8 @@ class _JevService:
             if payload.temperature is not None
             else self.temperatures[kind]
         )
+        if any(not math.isfinite(entry[0]) for entry in entries):
+            raise RuntimeError("vLLM returned nonfinite decision scores")
         result = choice_result(
             payload.options,
             [entry[0] for entry in entries],

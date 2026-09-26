@@ -15,7 +15,7 @@ from safetensors.torch import load_file
 from transformers import AutoProcessor
 from vllm import PoolingParams
 
-from .media import load_image
+from .media import MAX_IMAGES_PER_REQUEST, load_image, validate_text
 
 
 def _label(index: int) -> str:
@@ -52,7 +52,7 @@ class VjevService:
 
     def _state(self, state):
         if isinstance(state, str):
-            return [], state
+            return [], validate_text(state)
         if not isinstance(state, dict) or not isinstance(state.get("messages"), list):
             raise ValueError("vjev state must be text or a messages object")
         images, texts = [], []
@@ -70,13 +70,15 @@ class VjevService:
                 if not isinstance(item, dict):
                     raise ValueError("vjev content items must be objects")
                 if item.get("type") == "text" and isinstance(item.get("text"), str):
-                    texts.append(item["text"])
+                    texts.append(validate_text(item["text"]))
                 elif item.get("type") == "image_url":
                     image_url = item.get("image_url")
                     if not isinstance(image_url, dict):
                         raise ValueError("vjev image_url must contain a data URL")
-                    if len(images) == 8:
-                        raise ValueError("vjev accepts at most 8 images")
+                    if len(images) == MAX_IMAGES_PER_REQUEST:
+                        raise ValueError(
+                            f"vjev accepts at most {MAX_IMAGES_PER_REQUEST} images"
+                        )
                     image = load_image(image_url.get("url"))
                     if max(image.size) > 512:
                         ratio = 512 / max(image.size)
@@ -105,6 +107,7 @@ class VjevService:
             kind, instructions = question.get("type"), question.get("instructions")
             if not isinstance(instructions, str) or not instructions.strip():
                 raise ValueError("vjev instructions must be nonempty text")
+            validate_text(instructions)
             criteria = question.get("criteria")
             if kind == "noul":
                 if criteria is not None:
@@ -135,6 +138,8 @@ class VjevService:
                 for key, value in pairs
             ):
                 raise ValueError("vjev candidates need text labels and descriptions")
+            for _, value in pairs:
+                validate_text(value)
             candidates += len(pairs) if pairs else 1
             prepared.append((identifier, kind, instructions, pairs))
         if candidates > 256:

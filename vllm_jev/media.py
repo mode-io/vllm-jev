@@ -7,6 +7,22 @@ import math
 
 from PIL import Image
 
+MAX_IMAGES_PER_REQUEST = 8
+
+
+def validate_text(value: str) -> str:
+    if any(
+        marker in value
+        for marker in (
+            "<|image_pad|>",
+            "<|video_pad|>",
+            "<|vision_start|>",
+            "<|vision_end|>",
+        )
+    ):
+        raise ValueError("text must not contain reserved image or video markers")
+    return value
+
 
 def load_image(value):
     if not isinstance(value, str) or not value.startswith(

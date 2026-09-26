@@ -15,6 +15,7 @@ from safetensors.torch import load_file
 from transformers import AutoProcessor
 from vllm import PoolingParams
 
+from .media import MAX_IMAGES_PER_REQUEST, validate_text
 from .media import load_image as _load_image
 
 
@@ -101,11 +102,13 @@ class ValenService:
 
     def _state(self, state):
         if isinstance(state, str):
+            validate_text(state)
             messages = [{"role": "user", "content": [{"type": "text", "text": state}]}]
         elif isinstance(state, dict) and isinstance(state.get("messages"), list):
             if not state["messages"]:
                 raise ValueError("Valen messages must be nonempty")
             messages = []
+            image_count = 0
             for message in state["messages"]:
                 if (
                     not isinstance(message, dict)
@@ -113,6 +116,7 @@ class ValenService:
                     or not message["role"]
                 ):
                     raise ValueError("Valen messages require a text role")
+                validate_text(message["role"])
                 content = message.get("content")
                 if isinstance(content, str):
                     content = [{"type": "text", "text": content}]
@@ -127,8 +131,14 @@ class ValenService:
                     if item.get("type") == "text":
                         if not isinstance(item.get("text"), str):
                             raise ValueError("Valen text content must be a string")
+                        validate_text(item["text"])
                         rendered.append({"type": "text", "text": item["text"]})
                     elif item.get("type") == "image_url":
+                        if image_count >= MAX_IMAGES_PER_REQUEST:
+                            raise ValueError(
+                                f"Valen accepts at most {MAX_IMAGES_PER_REQUEST} images"
+                            )
+                        image_count += 1
                         image_url = item.get("image_url")
                         if not isinstance(image_url, dict):
                             raise ValueError("Valen image_url must contain a data URL")
@@ -173,7 +183,11 @@ class ValenService:
             instructions = question.get("instructions")
             if not isinstance(instructions, str) or not instructions.strip():
                 raise ValueError("Valen instructions must be nonempty text")
+            validate_text(instructions)
             pairs = _candidates(question)
+            for key, description in pairs:
+                validate_text(key)
+                validate_text(description)
             candidate_count += len(pairs)
             prepared.append((identifier, kind, instructions, pairs))
         if candidate_count > 256:

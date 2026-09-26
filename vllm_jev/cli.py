@@ -10,7 +10,8 @@ from pathlib import Path
 
 def main() -> None:
     if (
-        len(sys.argv) > 1
+        sys.platform != "darwin"
+        and len(sys.argv) > 1
         and sys.argv[1] == "serve"
         and any(value.startswith("--help=") for value in sys.argv[2:])
     ):
@@ -24,8 +25,12 @@ def main() -> None:
     serve = commands.add_parser(
         "serve",
         allow_abbrev=False,
-        help="Download, prepare, and serve a Jev model with vLLM.",
-        epilog="Additional arguments are forwarded to vllm serve.",
+        help="Download, prepare, and serve a Jev model.",
+        epilog=(
+            "Apple Silicon serving uses MLX."
+            if sys.platform == "darwin"
+            else "Additional arguments are forwarded to vllm serve."
+        ),
     )
     serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
@@ -47,7 +52,19 @@ def main() -> None:
         default="auto",
         help="Checkpoint protocol (default: auto).",
     )
-    args, extra = parser.parse_known_args()
+    arguments = sys.argv[1:]
+    if sys.platform == "darwin":
+        serve.add_argument("--host", default="127.0.0.1")
+        serve.add_argument("--port", type=int, default=8795)
+        arguments = [
+            "--help" if value.startswith("--help=") else value for value in arguments
+        ]
+    args, extra = parser.parse_known_args(arguments)
+    if sys.platform == "darwin":
+        if extra:
+            parser.error(f"unrecognized arguments: {' '.join(extra)}")
+        if not 0 <= args.port <= 65535:
+            parser.error("port must be between 0 and 65535")
     workspace = args.workspace.resolve()
     environment = os.environ.copy()
     environment.setdefault("HF_HOME", str(workspace / ".cache"))
@@ -60,6 +77,14 @@ def main() -> None:
 
     model_id = PROFILES[args.model][0] if args.model in PROFILES else args.model
     checkpoint = Path(model_id)
+    if (
+        sys.platform == "darwin"
+        and not checkpoint.is_dir()
+        and model_id not in ("IamBusy/OpenJev-0.6B", "Valen-Team/Valen-Preview-0923")
+    ):
+        parser.error(
+            "macOS supports IamBusy/OpenJev-0.6B and Valen-Team/Valen-Preview-0923"
+        )
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
         valen_manifest = checkpoint / "valen_manifest.json"
@@ -108,6 +133,11 @@ def main() -> None:
         manifest = json.loads(manifest_path.read_text())
         if manifest.get("prompt_protocol", "open_jev_choice") != args.protocol:
             parser.error("requested protocol differs from the prepared checkpoint")
+    if sys.platform == "darwin":
+        from .mac import serve as serve_mac
+
+        serve_mac(checkpoint, model_id, host=args.host, port=args.port)
+        return
 
     defaults = (
         f"--runner pooling --convert none --max-model-len {8192 if is_valen else 4096} "

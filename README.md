@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-<h3 align="center">Candidate decisions and probabilities, served by vLLM</h3>
+<h3 align="center">Fast structured decisions on Linux and Apple Silicon</h3>
 
 <p align="center">
   <a href="docs/guide.md"><b>Documentation</b></a> ·
@@ -18,6 +18,12 @@
 ---
 
 ## Demos
+
+### Apple Silicon: live image decisions
+
+![Valen answering six GameQA Maze image questions locally on an Apple Silicon Mac](docs/assets/mac-valen-maze-live.gif)
+
+Valen 2B answers six [GameQA Maze](https://huggingface.co/datasets/Valen-Team/Valen-Eval-General-5k) image questions locally on an Apple M5 using MLX. The display follows live HTTP responses. [Watch the MP4](docs/assets/mac-valen-maze-live.mp4).
 
 ### Multimodal: live Sokoban
 
@@ -35,7 +41,8 @@ The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP serve
 
 vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
 
-- **Native vLLM serving:** scheduling, batching, compilation, KV cache, and metrics.
+- **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
+- **Apple Silicon preview:** run OpenJev-0.6B text decisions and Valen text/image decisions locally through MLX.
 - **Native decision readouts:** scalar candidate branches or marker-token scores, selected from the model format.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen and vjev vision models accept text and images through the same System One API.
@@ -43,7 +50,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 
 ## Getting Started
 
-Install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
+On Linux with an NVIDIA GPU, install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
 
 ```bash
 uv pip install .
@@ -58,6 +65,15 @@ vllm-jev serve ZefanCai/Open-Jev-2B
 ```
 
 The command downloads and prepares the model, then starts native vLLM at `http://127.0.0.1:8795`. Later runs reuse the prepared checkpoint.
+
+On an Apple Silicon Mac with macOS 15 or newer, set up once from the repository directory, then serve:
+
+```bash
+source scripts/install_mac.sh
+vllm-jev serve Valen-Team/Valen-Preview-0923
+```
+
+The command downloads and prepares the model on first use. Send text or images to `/v1/systemone` for Choice, Noul, and Score decisions. For the smaller text-only model, use `vllm-jev serve IamBusy/OpenJev-0.6B`.
 
 <details>
 <summary>GPU, port, and serving options</summary>
@@ -80,6 +96,8 @@ Visit our [documentation](docs/guide.md) to learn more.
 ## Supported Models
 
 Choose a model and run its command:
+
+The models below run on Linux. Apple Silicon also supports `IamBusy/OpenJev-0.6B` for text and `Valen-Team/Valen-Preview-0923` for text and images.
 
 | Model | Start server |
 |---|---|
@@ -105,18 +123,36 @@ The response contains `answers.intent.choice` and `answers.intent.probabilities`
 
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
-For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-image-with-valen). These adapters accept text and images; video input is not yet supported.
+For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). These adapters accept text and images; video input is not yet supported.
 
 ## Updates
 
+### 2026-09-26
+
+- Added local text and image decisions on Apple Silicon with OpenJev-0.6B and Valen.
+- Set up with one script, then start a model with the same `vllm-jev serve` command.
+- Keep the server responsive during inference, with support for cancelling requests.
+
 ### 2026-09-25
 
-- Added one-command Valen Preview serving for text and image Choice, Noul, and Score requests.
-- Added native image inference for `yah01/vjev-vision` and its earlier pilot checkpoint, using one vLLM adapter for both.
+- Added multimodal decision inference with support for text and images.
 - Added a fused Tiny-Jev head: **12.1% higher throughput** in the measured 16-option, 16-concurrent workload.
-- On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Measurement notes](docs/guide.md#2026-09-25).
+- On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Results](#inference-performance).
 
 ## Inference performance
+
+### Apple Silicon
+
+Measured on an **Apple M5 with 16 GB unified memory**, using MLX: 96 text Choice requests for OpenJev and 42 GameQA Maze image questions for Valen. Requests are sequential after warmup; model loading is excluded.
+
+| Model | Input | Latency (ms) | P95 (ms) | Throughput (req/s) |
+|---|---|---:|---:|---:|
+| OpenJev-0.6B | Text | 67.9 | 120.2 | 12.02 |
+| Valen-Preview-0923 | Image | 205.9 | 249.7 | 4.64 |
+
+Valen selected the same answers as the Linux reference on all 42 questions; both answered 17 correctly. Probability values differ between backends. Mac executes one model request at a time; concurrent requests queue.
+
+### NVIDIA GPUs
 
 Each row uses the same model, input, and A800 GPU for both paths. Lower latency and higher throughput are better. Measurement methods are noted below.
 
@@ -144,7 +180,15 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 | [vjev-vision](https://huggingface.co/yah01/vjev-vision)⁴ | Image | 1 | 239.8 → 84.1 | 265.7 → 88.5 | 4.13 → 11.94 | 2.8× | 2.9× |
 | [vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot)⁴ | Image | 1 | 231.4 → 84.2 | 242.1 → 88.4 | 4.28 → 11.92 | 2.7× | 2.8× |
 
-¹ The 0.6B baseline used the author's scorer on CUDA. ² Tiny-Jev used a serialized HTTP wrapper around its Python API; gains include serving and batching. ³ Valen compares the author's runtime with native vLLM offline inference on the same 500 image questions, one request at a time. Both reached 86.8% target-support accuracy; these figures do not include HTTP overhead. ⁴ vjev compares the author's Python scorer with vLLM Jev HTTP on 100 identical game images, one request at a time, on the same A800. The vLLM side includes HTTP time; these images test serving speed, not vjev game accuracy.
+<details>
+<summary>Benchmark notes</summary>
+
+- ¹ OpenJev-0.6B uses the author's CUDA scorer as its baseline.
+- ² Tiny-Jev uses a serialized HTTP wrapper around the author's Python API; gains include batching.
+- ³ Valen uses sequential offline inference on 500 image questions. Both paths reached 86.8% target-support accuracy; choices agreed on 98.8%. Probability values differed, with a largest per-question difference of 0.295. HTTP time is excluded. A separate 500-request HTTP run at concurrency 8 reached 40.6 req/s (193.4 ms median latency).
+- ⁴ vjev uses the author's Python scorer versus vLLM Jev HTTP on 100 identical game images and the same A800. Only the vLLM side includes HTTP time. This measures serving speed, not game accuracy.
+
+</details>
 
 ## Contributing
 

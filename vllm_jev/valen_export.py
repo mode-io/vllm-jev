@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import torch
@@ -81,7 +82,9 @@ def export_valen(base: Path, checkpoint: Path, output: Path) -> dict:
             r=32, lora_alpha=64, lora_dropout=0.0, target_modules=targets, bias="none"
         ),
     )
-    model = _ValenWeights(backbone, 2048, 256).to("cuda:0")
+    model = _ValenWeights(backbone, 2048, 256).to(
+        "cpu" if sys.platform == "darwin" else "cuda:0"
+    )
     weights = payload["weights"]
     if set(weights) - set(model.state_dict()):
         raise ValueError("Valen checkpoint contains unknown inference weights")
@@ -163,7 +166,11 @@ def verify_valen(path: Path, *, full: bool = True) -> dict:
         or manifest.get("source_repository") != MODEL_ID
         or manifest.get("source_revision") != MODEL_REVISION
         or manifest.get("source_weights_sha256") != CHECKPOINT_SHA256
+        or manifest.get("prompt_protocol") != "valen_qwen_v1"
+        or manifest.get("foundation_repository") != BASE_ID
         or manifest.get("foundation_revision") != BASE_REVISION
+        or manifest.get("projection_dim") != 256
+        or not isinstance(manifest.get("media_kwargs"), dict)
     ):
         raise ValueError("unrecognized Valen preview checkpoint")
     config = json.loads((path / "config.json").read_text())

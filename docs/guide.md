@@ -1,6 +1,6 @@
 # User guide
 
-vLLM Jev serves supported Jev models through vLLM. Send a state and a question to get a label, a probability distribution, a yes/no probability, or an ordered score. Serving does not train the model.
+Serve Jev models with vLLM. Send text or images and questions; receive labels, probabilities, yes/no answers, or scores.
 
 ## Installation
 
@@ -11,6 +11,19 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 uv pip install .
 ```
+
+For development, use `uv pip install -e .` to install from your working tree.
+
+On Apple Silicon with macOS 15 or newer, run the setup script from the repository directory. Sourcing it leaves the Python 3.12 environment active:
+
+```bash
+source scripts/install_mac.sh
+vllm-jev serve Valen-Team/Valen-Preview-0923
+```
+
+The macOS preview uses MLX. Valen accepts text and images through `/v1/systemone`; for text-only Choice and batch requests, start `IamBusy/OpenJev-0.6B` instead. Scores can differ numerically from Linux CUDA results.
+
+OpenJev-0.6B allows 768 tokens for the shared state prefix and 192 tokens for each question-and-candidate branch, including prompt formatting.
 
 ## Quickstart
 
@@ -30,17 +43,19 @@ curl -f http://127.0.0.1:8795/health
 
 Input support depends on the model:
 
-| Model | Input | Start server |
-|---|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | `vllm-jev serve ZefanCai/Open-Jev-2B` |
-| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | `vllm-jev serve ZefanCai/Open-Jev-9B` |
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | `vllm-jev serve lostargon/Tiny-Jev` |
-| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
-| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | `vllm-jev serve yah01/vjev-vision` |
-| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | `vllm-jev serve yah01/vjev-vision-pilot` |
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux | `vllm-jev serve lostargon/Tiny-Jev` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
 
-Image requests use `/v1/systemone`. The vjev pilot is an earlier vision checkpoint; use `yah01/vjev-vision` by default. Video input is not supported by these adapters yet.
+Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
+
+Image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Video input is not supported.
 
 ## Serving options
 
@@ -50,7 +65,9 @@ Choose a GPU or pass regular vLLM options after the model ID:
 CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B --port 9000
 ```
 
-The default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens for the text models and 8,192 for Valen. Run `vllm-jev serve --help=all` to see additional vLLM options.
+On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, or 8,192 for Valen. Run `vllm-jev serve --help=all` to see additional vLLM options.
+
+On macOS, `vllm-jev serve` supports `--host` and `--port`; its MLX backend manages unified memory automatically.
 
 Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the downloaded Jev files and prepared model; its default is `.local/` in your current directory.
 
@@ -58,15 +75,11 @@ Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the
 
 | Route | What it does |
 |---|---|
-| `POST /plugins/vllm-jev/choice` | Ask one multiple-choice question; returns a label and probabilities. |
-| `POST /plugins/vllm-jev/batch` | Ask several multiple-choice questions together. |
-| `POST /v1/systemone` | Ask Choice, Noul (yes/no), or Score questions about a shared state. |
+| `POST /v1/systemone` | Choice, Noul (yes/no), and Score for all supported models. |
+| `POST /plugins/vllm-jev/choice` | One multiple-choice question for text models. |
+| `POST /plugins/vllm-jev/batch` | A batch of multiple-choice questions for text models. |
 
-Valen and vjev use `/v1/systemone` for text and image requests. The two `/plugins/vllm-jev/*` routes are for the four text models.
-
-Noul and Score use `/v1/systemone` with a question `type`. They do not have separate URLs. The native vLLM `/classify` and `/pooling` routes remain available for raw model outputs.
-
-One System One request supports up to 64 questions and 256 candidate sequences.
+Noul and Score are question types on `/v1/systemone`. One request supports up to 64 questions and 256 candidates.
 
 ### Choice
 
@@ -118,9 +131,11 @@ curl -sS http://127.0.0.1:8795/plugins/vllm-jev/batch \
 
 The reply has one Choice result per request under `results`, in the same order.
 
-### Text and image with Valen
+<a id="text-and-image-with-valen"></a>
 
-Start `vllm-jev serve Valen-Team/Valen-Preview-0923`. Supply PNG or JPEG images as data URLs in `state.messages`; use a text-only `state` string when no image is needed. This example asks about a local image:
+### Text and images
+
+Start Valen or either vjev model from the table above. Put image data URLs in `state.messages`; use a `state` string for text-only requests. For a local PNG:
 
 ```python
 import base64
@@ -141,25 +156,20 @@ response = urllib.request.urlopen(urllib.request.Request(url, body, {"Content-Ty
 print(json.load(response)["answers"]["color"])
 ```
 
-The answer contains `choice`, `confidence`, and `probabilities`. Valen also accepts Noul and Score questions through this route. Its current adapter supports text and images; video is not yet supported.
-
-The same request body works with `vllm-jev serve yah01/vjev-vision` or `vllm-jev serve yah01/vjev-vision-pilot`. Both vjev checkpoints use a trained vision readout and support text-only requests too. They accept multiple images; the author trained these checkpoints on single images, so evaluate multi-image answers for your task. Probabilities may differ slightly from the author's inference runtime.
+`answers.color` contains `choice`, `confidence`, and `probabilities`. The same image request can include Noul and Score questions.
 
 ## Updates
 
+### 2026-09-26
+
+- Added Apple Silicon text serving with OpenJev-0.6B and text/image serving with Valen.
+- Added one-step setup and the same model-name-based serving command on Mac.
+- Improved responsiveness under load and cancellation of pending work.
+
 ### 2026-09-25
 
-This release adds Valen text/image inference and a fused Tiny-Jev decision head. The Valen adapter runs its Qwen3.5 backbone through native vLLM token pooling and applies the released decision projections at the candidate positions. `vllm-jev serve Valen-Team/Valen-Preview-0923` downloads and prepares the pinned inference weights; it does not train the model.
+- Added Valen and vjev text/image serving.
+- Improved Tiny-Jev inference speed.
+- Improved model validation and request handling.
 
-For 500 image questions from the Valen evaluation game on one A800, the author's sequential inference and vLLM Jev used the same model weights and inputs:
-
-| Measurement | No vLLM Jev | vLLM Jev |
-|---|---:|---:|
-| Median latency | 231.9 ms | 77.3 ms |
-| P95 latency | 240.2 ms | 82.0 ms |
-| Throughput | 4.30 req/s | 12.90 req/s |
-| Target-support accuracy | 86.8% | 86.8% |
-
-The selected choice matched on 494/500 questions (98.8%). Probability outputs have numerical differences: median maximum per-question probability difference was small, but the worst was about 0.295. Accuracy on this set therefore does not imply exact probability equivalence. An HTTP run at eight concurrent requests completed 500/500 requests with 40.6 req/s and 193.4 ms median latency. The fused Tiny-Jev head improved the measured 16-option, concurrency-16 throughput by 12.1%; four-option requests were roughly flat.
-
-“No vLLM Jev” in the table uses Valen's author runtime.
+See the [demos](../README.md#demos) and [performance results](../README.md#inference-performance).
