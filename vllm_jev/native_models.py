@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -70,6 +71,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         CHOICE_PROTOCOL,
         BRANCH_PROTOCOL,
         TINY_PROTOCOL,
+        "laya_markers_v1",
         "valen_qwen_v1",
         "vjev_vision_v1",
     ):
@@ -84,10 +86,53 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
     output = workspace / "checkpoint" / model_id
     output.parent.mkdir(parents=True, exist_ok=True)
     with FileLock(str(output) + ".lock"):
+        if sys.platform == "darwin":
+            from .laya_export import MODELS as LAYA_MODELS
+
+            if model_id in LAYA_MODELS:
+                if protocol not in ("auto", "laya_markers_v1"):
+                    raise ValueError(f"{model_id} uses laya_markers_v1, not {protocol}")
+                from .mac_laya import prepare as prepare_laya_mps
+
+                return prepare_laya_mps(model_id, workspace)
         return _prepare(model_id, workspace, protocol)
 
 
 def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
+    from .laya_export import MODELS as LAYA_MODELS
+
+    if model_id in LAYA_MODELS:
+        if protocol not in ("auto", "laya_markers_v1"):
+            raise ValueError(f"{model_id} uses laya_markers_v1, not {protocol}")
+        from .laya_export import (
+            SOURCE_FILES,
+            export_laya,
+            verify_laya,
+        )
+
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            verify_laya(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=LAYA_MODELS[model_id][0],
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=SOURCE_FILES,
+            )
+        )
+        temporary = Path(tempfile.mkdtemp(prefix=".laya-", dir=output.parent))
+        try:
+            export_laya(source, temporary, model_id)
+            verify_laya(temporary, full=True)
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+        return output
+
     from .vjev_export import REVISIONS as VJEV_REVISIONS
 
     if model_id in VJEV_REVISIONS:
@@ -356,6 +401,7 @@ def main() -> None:
             CHOICE_PROTOCOL,
             BRANCH_PROTOCOL,
             TINY_PROTOCOL,
+            "laya_markers_v1",
             "valen_qwen_v1",
             "vjev_vision_v1",
         ),

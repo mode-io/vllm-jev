@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 import time
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -15,7 +16,13 @@ from mlx_lm import load
 from mlx_lm.models.cache import ConcatenateKVCache
 
 from .endpoint import ChoiceRequest, JevEndpointPlugin
-from .prompt import branch_token_ids, choice_result
+from .prompt import (
+    branch_token_ids,
+    candidate_prompts,
+    choice_result,
+    render_value,
+    tiny_token_ids,
+)
 
 
 class _MacService:
@@ -47,20 +54,31 @@ class MacJevService(_MacService):
     def __init__(self, checkpoint: Path, model_id: str, executor: ThreadPoolExecutor):
         super().__init__(executor)
         manifest = json.loads((checkpoint / "jev_manifest.json").read_text())
-        if manifest["prompt_protocol"] != "openjev_branch_v03":
-            raise ValueError("macOS serving currently supports OpenJev-0.6B")
+        if manifest["prompt_protocol"] not in (
+            "openjev_branch_v03",
+            "open_jev_choice",
+            "tiny_jev_marker",
+        ):
+            raise ValueError("unsupported Mac text decision protocol")
         config = json.loads((checkpoint / "config.json").read_text())
-        if config.get("model_type") != "qwen3":
-            raise ValueError("macOS serving requires a Qwen3 text checkpoint")
+        if config.get("model_type") not in ("qwen3", "qwen3_5_text"):
+            raise ValueError("macOS serving requires a supported Qwen text checkpoint")
 
-        rope_theta = config.get("rope_theta") or config["rope_parameters"]["rope_theta"]
-        self.model, self.tokenizer = load(
-            str(checkpoint), model_config={"rope_theta": rope_theta}
-        )
+        overrides = {}
+        if config["model_type"] == "qwen3":
+            overrides["rope_theta"] = (
+                config.get("rope_theta") or config["rope_parameters"]["rope_theta"]
+            )
+        else:
+            overrides["model_type"] = "qwen3_5"
+        self.model, self.tokenizer = load(str(checkpoint), model_config=overrides)
         head = mx.load(str(checkpoint / "score.safetensors"))
         self.weight, self.bias = head["score.weight"], head["score.bias"]
         self.protocol = manifest["prompt_protocol"]
-        self.temperatures = manifest["calibration_temperatures"]
+        self.temperatures = manifest.get("calibration_temperatures") or {
+            kind: manifest["calibration_temperature"]
+            for kind in ("choice", "noul", "score")
+        }
         self.default_temperature = self.temperatures["choice"]
         self.model_id = model_id
         self.model_names = [model_id]
@@ -77,6 +95,75 @@ class MacJevService(_MacService):
 
     def _choice(self, payload: ChoiceRequest, kind: str, cancelled: Event) -> dict:
         started = time.perf_counter()
+        if self.protocol == "tiny_jev_marker":
+            ids, positions = tiny_token_ids(
+                self.tokenizer, payload.state, payload.question, payload.options
+            )
+            rendered = time.perf_counter()
+            if cancelled.is_set():
+                raise CancelledError()
+            hidden = self.model.model(mx.array([ids]))[0]
+            selected = hidden[mx.array(positions)].astype(mx.float32)
+            mean = mx.mean(selected, axis=-1, keepdims=True)
+            variance = mx.mean(mx.square(selected - mean), axis=-1, keepdims=True)
+            normalized = (selected - mean) * mx.rsqrt(variance + 1e-5)
+            values = mx.matmul(normalized, self.weight.T)[:, 0] + self.bias[0]
+            mx.eval(values)
+            scores = values.tolist()
+            scored = time.perf_counter()
+            temperature = payload.temperature or self.temperatures[kind]
+            result = choice_result(payload.options, scores, temperature)
+            finished = time.perf_counter()
+            result.update(
+                candidate_count=len(positions),
+                cached_tokens=[0] * len(positions),
+                prompt_tokens=[len(ids), *([0] * (len(positions) - 1))],
+                latency_seconds=finished - started,
+                timing={
+                    "render_seconds": rendered - started,
+                    "engine_seconds": scored - rendered,
+                    "postprocess_seconds": finished - scored,
+                },
+                prefix_cache_requested=False,
+                temperature=temperature,
+            )
+            return result
+        if self.protocol == "open_jev_choice":
+            prompts = candidate_prompts(
+                payload.state, payload.question, payload.options
+            )
+            branches = [
+                self.tokenizer.encode(
+                    self.tokenizer.apply_chat_template(
+                        [{"role": "user", "content": prompt}],
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        enable_thinking=False,
+                    ),
+                    add_special_tokens=False,
+                )
+                for prompt in prompts
+            ]
+            rendered = time.perf_counter()
+            scores = [self._score(branch, cancelled) for branch in branches]
+            scored = time.perf_counter()
+            temperature = payload.temperature or self.temperatures[kind]
+            result = choice_result(payload.options, scores, temperature)
+            finished = time.perf_counter()
+            result.update(
+                candidate_count=len(branches),
+                cached_tokens=[0] * len(branches),
+                prompt_tokens=[len(branch) for branch in branches],
+                latency_seconds=finished - started,
+                timing={
+                    "render_seconds": rendered - started,
+                    "engine_seconds": scored - rendered,
+                    "postprocess_seconds": finished - scored,
+                },
+                prefix_cache_requested=False,
+                temperature=temperature,
+            )
+            return result
         branches = branch_token_ids(
             self.tokenizer, payload.state, payload.question, payload.options
         )
@@ -136,6 +223,30 @@ class MacJevService(_MacService):
     async def choice(self, payload: ChoiceRequest, kind: str = "choice") -> dict:
         return await self._run(self._choice, payload, kind)
 
+    def _noul(self, state, question: str, cancelled: Event):
+        raw = (
+            f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
+            "Is the answer to this question yes? Answer Yes or No."
+        )
+        prompt = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": raw}],
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+        ids = self.tokenizer.encode(prompt, add_special_tokens=False)
+        score = self._score(ids, cancelled)
+        scaled = score / self.temperatures["noul"]
+        probability = (
+            1 / (1 + math.exp(-scaled))
+            if scaled >= 0
+            else math.exp(scaled) / (1 + math.exp(scaled))
+        )
+        return probability, 0, len(ids)
+
+    async def noul(self, state, question: str, salt: str):
+        return await self._run(self._noul, state, question)
+
     def close(self) -> None:
         del self.model, self.weight, self.bias
         mx.clear_cache()
@@ -143,8 +254,15 @@ class MacJevService(_MacService):
 
 def serve(checkpoint: Path, model_id: str, *, host: str, port: int) -> None:
     is_valen = (checkpoint / "valen_manifest.json").is_file()
+    from .laya_export import MODELS as LAYA_MODELS
+
+    is_laya = model_id in LAYA_MODELS
 
     def load_service(executor):
+        if is_laya:
+            from .mac_laya import MacLayaService
+
+            return MacLayaService(checkpoint, model_id, executor)
         if is_valen:
             from .mac_valen import MacValenService
 
@@ -159,7 +277,13 @@ def serve(checkpoint: Path, model_id: str, *, host: str, port: int) -> None:
         ) as executor:
             loop = asyncio.get_running_loop()
             service = await loop.run_in_executor(executor, load_service, executor)
-            name = "vllm_valen_service" if is_valen else "vllm_jev_service"
+            name = (
+                "vllm_laya_service"
+                if is_laya
+                else "vllm_valen_service"
+                if is_valen
+                else "vllm_jev_service"
+            )
             setattr(app.state, name, service)
             try:
                 yield

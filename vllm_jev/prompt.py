@@ -110,7 +110,7 @@ def tiny_token_ids(
     )
 
     def ids_of(value):
-        return tokenizer(value, add_special_tokens=False)["input_ids"]
+        return tokenizer.encode(value, add_special_tokens=False)
 
     opt_id = tokenizer.convert_tokens_to_ids(opt_token)
     if opt_id is None or opt_id == tokenizer.unk_token_id:

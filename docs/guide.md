@@ -21,7 +21,7 @@ source scripts/install_mac.sh
 vllm-jev serve Valen-Team/Valen-Preview-0923
 ```
 
-The macOS preview uses MLX. Valen accepts text and images through `/v1/systemone`; for text-only Choice and batch requests, start `IamBusy/OpenJev-0.6B` instead. Scores can differ numerically from Linux CUDA results.
+Valen accepts text and images through `/v1/systemone`. For text-only Choice and batch requests, start OpenJev-0.6B or Tiny-Jev. Laya handles Choice, Noul, and Score through the same `/v1/systemone` route on Mac.
 
 OpenJev-0.6B allows 768 tokens for the shared state prefix and 192 tokens for each question-and-candidate branch, including prompt formatting.
 
@@ -45,10 +45,13 @@ Input support depends on the model:
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac | `vllm-jev serve ZefanCai/Open-Jev-2B` |
 | [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux | `vllm-jev serve lostargon/Tiny-Jev` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac | `vllm-jev serve lostargon/Tiny-Jev` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
@@ -65,9 +68,11 @@ Choose a GPU or pass regular vLLM options after the model ID:
 CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B --port 9000
 ```
 
-On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, or 8,192 for Valen. Run `vllm-jev serve --help=all` to see additional vLLM options.
+On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, 8,192 for Valen, 512 for Laya English, and 1,024 for Laya multilingual and typed decisions. Run `vllm-jev serve --help=all` to see additional vLLM options.
 
-On macOS, `vllm-jev serve` supports `--host` and `--port`; its MLX backend manages unified memory automatically.
+On macOS, `vllm-jev serve` supports `--host` and `--port`. Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, and Valen use MLX; Laya uses the published PyTorch MPS runtime. Mac scores and speed may differ from Linux CUDA results.
+
+Cancelling a Mac request stops its HTTP wait. A Laya MPS inference already in progress may finish before the next queued request runs.
 
 Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the downloaded Jev files and prepared model; its default is `.local/` in your current directory.
 
@@ -76,10 +81,14 @@ Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the
 | Route | What it does |
 |---|---|
 | `POST /v1/systemone` | Choice, Noul (yes/no), and Score for all supported models. |
-| `POST /plugins/vllm-jev/choice` | One multiple-choice question for text models. |
-| `POST /plugins/vllm-jev/batch` | A batch of multiple-choice questions for text models. |
+| `POST /plugins/vllm-jev/choice` | One multiple-choice question for Open-Jev and Tiny-Jev text models. |
+| `POST /plugins/vllm-jev/batch` | A batch of questions for Open-Jev and Tiny-Jev text models. |
 
 Noul and Score are question types on `/v1/systemone`. One request supports up to 64 questions and 256 candidates.
+
+All three Laya checkpoints use `/v1/systemone` for Choice, Noul, and Score. Their trained decision heads read the options supplied in each request. The English checkpoint allows 192 tokens for question text and options together; multilingual and typed decisions allow 256.
+
+The English and typed-decision releases contain an out-of-range calibration value for Choice requests with 11 or more options. The pinned Laya runtime clamps it; check confidence on your own data for that case.
 
 ### Choice
 
@@ -162,6 +171,9 @@ print(json.load(response)["answers"]["color"])
 
 ### 2026-09-26
 
+- Added Laya English, multilingual, and typed-decision serving on Linux and Apple Silicon.
+- Added Tiny-Jev marker decisions on Apple Silicon.
+- Added Open-Jev-2B scalar decisions on Apple Silicon.
 - Added Apple Silicon text serving with OpenJev-0.6B and text/image serving with Valen.
 - Added one-step setup and the same model-name-based serving command on Mac.
 - Improved responsiveness under load and cancellation of pending work.
