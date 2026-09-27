@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import torch
@@ -81,7 +82,9 @@ def export_valen(base: Path, checkpoint: Path, output: Path) -> dict:
             r=32, lora_alpha=64, lora_dropout=0.0, target_modules=targets, bias="none"
         ),
     )
-    model = _ValenWeights(backbone, 2048, 256).to("cuda:0")
+    model = _ValenWeights(backbone, 2048, 256).to(
+        "cpu" if sys.platform == "darwin" else "cuda:0"
+    )
     weights = payload["weights"]
     if set(weights) - set(model.state_dict()):
         raise ValueError("Valen checkpoint contains unknown inference weights")

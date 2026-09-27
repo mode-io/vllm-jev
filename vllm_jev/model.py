@@ -5,6 +5,7 @@ import triton
 import triton.language as tl
 from vllm.model_executor.models.adapters import as_embedding_model, as_seq_cls_model
 from vllm.model_executor.models.interfaces import IsHybrid, SupportsMRoPE
+from vllm.model_executor.models.modernbert import ModernBertModel
 from vllm.model_executor.models.qwen3 import Qwen3ForCausalLM
 from vllm.model_executor.models.qwen3_5 import (
     Qwen3_5ForCausalLM,
@@ -67,6 +68,10 @@ class VllmVjevQwen35ForTokenEmbedding(
 
 class VllmJevQwen3ForTokenEmbedding(as_embedding_model(Qwen3ForCausalLM)):
     """Native Qwen3 token embeddings for marker-position decision heads."""
+
+
+class VllmLayaModernBertForTokenEmbedding(as_embedding_model(ModernBertModel)):
+    """Native bidirectional ModernBERT states for Laya's trained decision head."""
 
 
 @triton.jit
