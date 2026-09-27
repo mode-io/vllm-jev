@@ -156,6 +156,8 @@ class LayaService:
             if not identifier:
                 raise ValueError("question IDs must be nonempty")
             definition = payload.questions[identifier]
+            if definition.get("type") not in ("choice", "noul", "score"):
+                raise ValueError("question type must be choice, noul or score")
             criteria = definition.get("criteria")
             if (
                 definition.get("type") == "choice"

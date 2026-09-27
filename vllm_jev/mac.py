@@ -70,6 +70,7 @@ class MacJevService(_MacService):
         config = json.loads((checkpoint / "config.json").read_text())
         if config.get("model_type") not in ("qwen3", "qwen3_5_text"):
             raise ValueError("macOS serving requires a supported Qwen text checkpoint")
+        self.max_length = config["max_position_embeddings"]
         if (
             config["model_type"] == "qwen3_5_text"
             or manifest["prompt_protocol"] == "openjev_branch_v03"
@@ -204,6 +205,10 @@ class MacJevService(_MacService):
                 )
                 for prompt in prompts
             ]
+            if any(len(branch) > self.max_length for branch in branches):
+                raise ValueError(
+                    f"prompt exceeds model context ({self.max_length} tokens)"
+                )
             rendered = time.perf_counter()
             cached_tokens = [0] * len(branches)
             scores = None
@@ -320,6 +325,8 @@ class MacJevService(_MacService):
             enable_thinking=False,
         )
         ids = self.tokenizer.encode(prompt, add_special_tokens=False)
+        if len(ids) > self.max_length:
+            raise ValueError(f"prompt exceeds model context ({self.max_length} tokens)")
         score = self._score(ids, cancelled)
         scaled = score / self.temperatures["noul"]
         probability = (

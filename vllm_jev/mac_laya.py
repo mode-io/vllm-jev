@@ -72,6 +72,8 @@ class MacLayaService(_MacService):
             raise ValueError("requested model is not loaded")
         from laya.common import serialize_state
 
+        if not isinstance(payload.state, (str, dict, list)):
+            raise ValueError("Laya state must be text or JSON")
         if len(serialize_state(payload.state)) > 50_000:
             raise ValueError("Laya state exceeds 50,000 characters")
         if len(payload.questions) > 64:
@@ -80,7 +82,15 @@ class MacLayaService(_MacService):
             raise ValueError("Laya questions exceed 2 MiB")
         candidates = 0
         for question in payload.questions.values():
+            if question.get("type") not in ("choice", "noul", "score"):
+                raise ValueError("question type must be choice, noul or score")
             criteria = question.get("criteria")
+            if (
+                question.get("type") == "choice"
+                and isinstance(criteria, list)
+                and any(isinstance(value, (dict, list, set)) for value in criteria)
+            ):
+                raise ValueError("choice labels must be scalar values")
             if question.get("type") == "noul":
                 candidates += 2
             elif isinstance(criteria, (dict, list)):
