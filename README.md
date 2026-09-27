@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-<h3 align="center">Candidate decisions and probabilities, served by vLLM</h3>
+<h3 align="center">Fast structured decisions on Linux and Apple Silicon</h3>
 
 <p align="center">
   <a href="docs/guide.md"><b>Documentation</b></a> ·
@@ -18,6 +18,12 @@
 ---
 
 ## Demos
+
+### Apple Silicon: live image decisions
+
+![Valen answering six GameQA Maze image questions locally on an Apple Silicon Mac](docs/assets/mac-valen-maze-live.gif)
+
+Valen 2B answers six [GameQA Maze](https://huggingface.co/datasets/Valen-Team/Valen-Eval-General-5k) image questions locally on an Apple M5 using MLX. The display follows live HTTP responses. [Watch the MP4](docs/assets/mac-valen-maze-live.mp4).
 
 ### Multimodal: live Sokoban
 
@@ -35,15 +41,16 @@ The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP serve
 
 vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
 
-- **Native vLLM serving:** scheduling, batching, compilation, KV cache, and metrics.
-- **Native decision readouts:** scalar candidate branches or marker-token scores, selected from the model format.
+- **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
+- **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen text/image decisions through MLX.
+- **Decision readouts:** scalar candidate branches, marker scores, and Laya's trained decision head.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen and vjev vision models accept text and images through the same System One API.
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
 
-Install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
+On Linux with an NVIDIA GPU, install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
 
 ```bash
 uv pip install .
@@ -58,6 +65,15 @@ vllm-jev serve ZefanCai/Open-Jev-2B
 ```
 
 The command downloads and prepares the model, then starts native vLLM at `http://127.0.0.1:8795`. Later runs reuse the prepared checkpoint.
+
+On an Apple Silicon Mac with macOS 15 or newer, set up once from the repository directory, then serve:
+
+```bash
+source scripts/install_mac.sh
+vllm-jev serve Valen-Team/Valen-Preview-0923
+```
+
+The command downloads and prepares the model on first use. Send text or images to `/v1/systemone` for Choice, Noul, and Score decisions. For another Mac model, replace the model ID with a supported one from the table below.
 
 <details>
 <summary>GPU, port, and serving options</summary>
@@ -81,10 +97,15 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 Choose a model and run its command:
 
+The models below run on Linux. Apple Silicon currently supports Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, all three Laya checkpoints, and Valen. On Mac, MLX runs the Qwen and Valen models; Laya uses PyTorch MPS.
+
 | Model | Start server |
 |---|---|
 | [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
 | [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
@@ -109,6 +130,21 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-09-27
+
+- Improved Apple Silicon text serving with adaptive batching, prefix reuse, and bounded memory caching.
+- Added optional CUDA Graph readouts for Laya multilingual on Linux.
+- Added optional repeated-image reuse for Valen on Mac. See [serving options](docs/guide.md#optional-acceleration).
+
+### 2026-09-26
+
+- Added all three Laya checkpoints on Linux and Apple Silicon: English, multilingual, and typed decisions.
+- Added Tiny-Jev serving on Apple Silicon with its marker readout.
+- Added Open-Jev-2B serving on Apple Silicon with its scalar decision head.
+- Added local text and image decisions on Apple Silicon with OpenJev-0.6B and Valen.
+- Set up with one script, then start a model with the same `vllm-jev serve` command.
+- Kept Mac server health checks responsive during inference.
+
 ### 2026-09-25
 
 - Added multimodal decision inference with support for text and images.
@@ -116,6 +152,19 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 - On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Results](#inference-performance).
 
 ## Inference performance
+
+### Apple Silicon
+
+Measured on an **Apple M5 with 16 GB unified memory**, using MLX: 96 text Choice requests for OpenJev and 42 GameQA Maze image questions for Valen. Requests are sequential after warmup; model loading is excluded.
+
+| Model | Input | Latency (ms) | P95 (ms) | Throughput (req/s) |
+|---|---|---:|---:|---:|
+| OpenJev-0.6B | Text | 67.9 | 120.2 | 12.02 |
+| Valen-Preview-0923 | Image | 205.9 | 249.7 | 4.64 |
+
+Valen selected the same answers as the Linux reference on all 42 questions; both answered 17 correctly. Probability values differ between backends. Mac executes one model request at a time; concurrent requests queue.
+
+### NVIDIA GPUs
 
 Each row uses the same model, input, and A800 GPU for both paths. Lower latency and higher throughput are better. Measurement methods are noted below.
 
@@ -131,6 +180,12 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Short | 8 | 5337.6 → 205.2 | 5393.2 → 207.4 | 1.50 → 38.87 | 26.0× | 26.0× |
 | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Long | 1 | 716.9 → 149.7 | 728.1 → 152.5 | 1.39 → 6.67 | 4.8× | 4.8× |
 | [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Long | 8 | 5726.5 → 1016.6 | 5749.3 → 1019.3 | 1.40 → 7.87 | 5.6× | 5.6× |
+| [Laya English](https://huggingface.co/convaiinnovations/laya)⁵ | MMLU sample | 1 | 26.6 → 10.3 | 28.0 → 12.6 | 37.61 → 94.79 | 2.6× | 2.5× |
+| [Laya English](https://huggingface.co/convaiinnovations/laya)⁵ | MMLU sample | 16 | 404.5 → 77.5 | 416.0 → 98.8 | 39.55 → 202.87 | 5.2× | 5.1× |
+| [Laya multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)⁶ | MMLU sample | 1 | 22.4 → 9.8 | 24.0 → 11.1 | 44.63 → 100.11 | 2.3× | 2.2× |
+| [Laya multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)⁶ | MMLU sample | 16 | 339.8 → 75.5 | 350.6 → 96.0 | 47.03 → 209.53 | 4.5× | 4.5× |
+| [Laya typed decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions)⁶ | MMLU sample | 1 | 26.1 → 10.5 | 27.2 → 12.4 | 38.91 → 92.30 | 2.5× | 2.4× |
+| [Laya typed decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions)⁶ | MMLU sample | 16 | 401.2 → 83.1 | 413.4 → 101.3 | 39.83 → 193.34 | 4.8× | 4.9× |
 | [OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B)¹ | Short | 1 | 74.6 → 16.4 | 76.5 → 17.0 | 13.35 → 63.03 | 4.5× | 4.7× |
 | [OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B)¹ | Short | 8 | 583.2 → 37.5 | 601.6 → 49.3 | 13.62 → 198.70 | 15.5× | 14.6× |
 | [OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B)¹ | Long | 1 | 74.2 → 23.8 | 75.5 → 24.2 | 13.46 → 42.55 | 3.1× | 3.2× |
@@ -150,6 +205,8 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 - ² Tiny-Jev uses a serialized HTTP wrapper around the author's Python API; gains include batching.
 - ³ Valen uses sequential offline inference on 500 image questions. Both paths reached 86.8% target-support accuracy; choices agreed on 98.8%. Probability values differed, with a largest per-question difference of 0.295. HTTP time is excluded. A separate 500-request HTTP run at concurrency 8 reached 40.6 req/s (193.4 ms median latency).
 - ⁴ vjev uses the author's Python scorer versus vLLM Jev HTTP on 100 identical game images and the same A800. Only the vLLM side includes HTTP time. This measures serving speed, not game accuracy.
+- ⁵ Laya compares the published `laya-serve` 0.3.20 with vLLM Jev HTTP on the same A800 and 500 fixed four-choice questions. Labels differed on 6/500 questions; the largest option-probability difference was 0.0222. Laya's direct `predict_batch` SDK can be faster for many states sharing one question schema; the HTTP figures do not measure that bulk path. The optional TileLang fast path was unavailable with this server's CUDA toolkit.
+- ⁶ The two additional Laya checkpoints use the same 500 English MMLU questions and A800 HTTP setup as ⁵. Their labels differed from the author's runtime on 7/500 (multilingual) and 2/500 (typed) questions. This tests serving on a shared English workload, not multilingual or typed-task quality.
 
 </details>
 
