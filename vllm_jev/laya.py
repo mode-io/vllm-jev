@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+import os
 import time
 import uuid
 import warnings
@@ -85,6 +86,15 @@ class LayaService:
         )
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.head.to(self.device).eval()
+        self.graph_head = None
+        if (
+            self.model_id == "convaiinnovations/laya-multilingual"
+            and self.device.type == "cuda"
+            and os.environ.get("VLLM_JEV_LAYA_CUDA_GRAPH") == "1"
+        ):
+            from .laya_graph import LayaGraphHead
+
+            self.graph_head = LayaGraphHead(self.head)
         self.semaphore = asyncio.Semaphore(max_inflight)
 
     async def _encode(self, ids: list[int], salt: str):
@@ -182,7 +192,14 @@ class LayaService:
             else nullcontext()
         )
         with torch.inference_mode(), autocast:
-            logits, action = self.head(
+            readout = (
+                self.graph_head
+                if self.graph_head is not None
+                and len(ids) == 1
+                and payload.questions[ids[0]]["type"] == "choice"
+                else self.head
+            )
+            logits, action = readout(
                 hidden,
                 batch["attention_mask"].to(self.device),
                 batch["marker_pos"].to(self.device),

@@ -130,6 +130,12 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-09-27
+
+- Improved Apple Silicon text serving with adaptive batching, prefix reuse, and bounded memory caching.
+- Added optional CUDA Graph readouts for Laya multilingual on Linux.
+- Added optional repeated-image reuse for Valen on Mac. See [serving options](docs/guide.md#optional-acceleration).
+
 ### 2026-09-26
 
 - Added all three Laya checkpoints on Linux and Apple Silicon: English, multilingual, and typed decisions.

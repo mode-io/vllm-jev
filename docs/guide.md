@@ -76,6 +76,27 @@ Cancelling a Mac request stops its HTTP wait. A Laya MPS inference already in pr
 
 Set `HF_HOME` for the Hugging Face base-model cache. Set `VLLM_JEV_HOME` for the downloaded Jev files and prepared model; its default is `.local/` in your current directory.
 
+### Optional acceleration
+
+On Mac, Open-Jev-2B batches eligible short candidate branches. Both Open-Jev-2B and OpenJev-0.6B reuse shared prefixes when beneficial. Their MLX allocator keeps about 512 MiB of reusable freed buffers; model weights and active tensors use additional memory. Send `"use_prefix_cache": false` to the Choice endpoint to disable prefix reuse.
+
+For Laya multilingual on Linux, enable CUDA Graph readouts and batch-invariant execution:
+
+```bash
+VLLM_JEV_LAYA_CUDA_GRAPH=1 VLLM_BATCH_INVARIANT=1 \
+  vllm-jev serve convaiinnovations/laya-multilingual
+```
+
+The graph path handles a single four-option Choice question with at most 320 input tokens. Other requests use the regular readout. Creating a new graph adds a small first-request delay and uses extra GPU memory. Batch-invariant execution stabilizes repeated outputs, but its probabilities can differ slightly from the default mode.
+
+For repeated images on Mac, enable Valen's image cache:
+
+```bash
+VLLM_JEV_MAC_IMAGE_CACHE=1 vllm-jev serve Valen-Team/Valen-Preview-0923
+```
+
+This opt-in cache retains up to two identical decoded images and their visual features in process memory until eviction or shutdown. It helps repeated single-image requests; new images use the normal path. Multi-image requests and large entries bypass the cache.
+
 ## HTTP API
 
 | Route | What it does |
@@ -168,6 +189,11 @@ print(json.load(response)["answers"]["color"])
 `answers.color` contains `choice`, `confidence`, and `probabilities`. The same image request can include Noul and Score questions.
 
 ## Updates
+
+### 2026-09-27
+
+- Improved Mac candidate scoring and memory caching.
+- Added optional Laya multilingual CUDA Graph readouts and Mac Valen image reuse.
 
 ### 2026-09-26
 

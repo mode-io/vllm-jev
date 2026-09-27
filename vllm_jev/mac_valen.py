@@ -2,7 +2,9 @@
 
 import json
 import math
+import os
 import time
+from collections import OrderedDict
 from concurrent.futures import CancelledError, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
@@ -28,6 +30,21 @@ class MacValenService(_MacService):
         head = mx.load(str(checkpoint / "valen_head.safetensors"))
         self.head = {key: value.astype(mx.float32) for key, value in head.items()}
         self.model_id = model_id
+        self._image_cache_size = (
+            2 if os.environ.get("VLLM_JEV_MAC_IMAGE_CACHE") == "1" else 0
+        )
+        self._image_cache = OrderedDict()
+
+    def _image_key(self, images):
+        if not self._image_cache_size or len(images) != 1:
+            return None
+        image = images[0]
+        if image.width * image.height * len(image.getbands()) > 8 * 1024**2:
+            return None
+        pixels = image.tobytes()
+        if len(pixels) > 8 * 1024**2:
+            return None
+        return image.mode, image.size, pixels
 
     def _systemone(self, payload: SystemOneRequest, cancelled: Event) -> dict:
         started = time.perf_counter()
@@ -38,18 +55,30 @@ class MacValenService(_MacService):
         )
         pixels = grid = image_features = None
         if images:
-            processed = self.compiler.processor.image_processor(
-                images=images,
-                return_tensors="np",
-                **self.compiler.media_kwargs.get("images_kwargs", {}),
-            )
-            pixels = mx.array(processed["pixel_values"])
-            grid = mx.array(processed["image_grid_thw"], dtype=mx.int32)
+            key = self._image_key(images)
+            cached = self._image_cache.get(key) if key is not None else None
             if cancelled.is_set():
                 raise CancelledError()
-            dtype = self.model.vision_tower.patch_embed.proj.weight.dtype
-            image_features, _ = self.model.vision_tower(pixels.astype(dtype), grid)
-            mx.eval(image_features)
+            if cached is not None:
+                pixels, grid, image_features = cached
+                self._image_cache.move_to_end(key)
+            else:
+                processed = self.compiler.processor.image_processor(
+                    images=images,
+                    return_tensors="np",
+                    **self.compiler.media_kwargs.get("images_kwargs", {}),
+                )
+                pixels = mx.array(processed["pixel_values"])
+                grid = mx.array(processed["image_grid_thw"], dtype=mx.int32)
+                dtype = self.model.vision_tower.patch_embed.proj.weight.dtype
+                image_features, _ = self.model.vision_tower(pixels.astype(dtype), grid)
+                mx.eval(image_features)
+                if key is not None and (
+                    pixels.nbytes + grid.nbytes + image_features.nbytes <= 64 * 1024**2
+                ):
+                    self._image_cache[key] = pixels, grid, image_features
+                    if len(self._image_cache) > self._image_cache_size:
+                        self._image_cache.popitem(last=False)
 
         answers = {}
         for identifier, kind, pairs, branches in questions:
@@ -102,5 +131,6 @@ class MacValenService(_MacService):
         return await self._run(self._systemone, payload)
 
     def close(self) -> None:
+        self._image_cache.clear()
         del self.model, self.head, self.compiler
         mx.clear_cache()

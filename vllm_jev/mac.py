@@ -12,8 +12,9 @@ from threading import Event
 import mlx.core as mx
 import uvicorn
 from fastapi import FastAPI
+from mlx.utils import tree_flatten
 from mlx_lm import load
-from mlx_lm.models.cache import ConcatenateKVCache
+from mlx_lm.models.cache import ArraysCache, ConcatenateKVCache
 
 from .endpoint import ChoiceRequest, JevEndpointPlugin
 from .prompt import (
@@ -51,6 +52,12 @@ class _MacService:
 
 
 class MacJevService(_MacService):
+    # Larger branch batches showed measurable BF16 probability drift on MLX.
+    _batch_choice_max_branches = 4
+    _batch_choice_max_tokens = 192
+    _prefix_choice_min_tokens = 128
+    _branch_prefix_min_reused_tokens = 300
+
     def __init__(self, checkpoint: Path, model_id: str, executor: ThreadPoolExecutor):
         super().__init__(executor)
         manifest = json.loads((checkpoint / "jev_manifest.json").read_text())
@@ -63,6 +70,12 @@ class MacJevService(_MacService):
         config = json.loads((checkpoint / "config.json").read_text())
         if config.get("model_type") not in ("qwen3", "qwen3_5_text"):
             raise ValueError("macOS serving requires a supported Qwen text checkpoint")
+        if (
+            config["model_type"] == "qwen3_5_text"
+            or manifest["prompt_protocol"] == "openjev_branch_v03"
+        ):
+            mx.set_cache_limit(512 * 1024**2)
+        self._hybrid_cache = config["model_type"] == "qwen3_5_text"
 
         overrides = {}
         if config["model_type"] == "qwen3":
@@ -92,6 +105,53 @@ class MacJevService(_MacService):
         value = mx.matmul(hidden[None], self.weight.T)[0, 0] + self.bias[0]
         mx.eval(value)
         return float(value.item())
+
+    def _batch_scores(self, branches: list[list[int]], cancelled: Event) -> list[float]:
+        if cancelled.is_set():
+            raise CancelledError()
+        lengths = [len(branch) for branch in branches]
+        longest = max(lengths)
+        pad = self.tokenizer.pad_token_id or 0
+        token_ids = mx.array(
+            [branch + [pad] * (longest - len(branch)) for branch in branches],
+            dtype=mx.int32,
+        )
+        hidden = self.model.model(token_ids).astype(mx.float32)
+        selected = hidden[mx.arange(len(branches)), mx.array(lengths) - 1]
+        values = (selected @ self.weight.T)[:, 0] + self.bias[0]
+        mx.eval(values)
+        return values.tolist()
+
+    def _prefix_scores(
+        self, branches: list[list[int]], prefix: int, cancelled: Event
+    ) -> list[float]:
+        if cancelled.is_set():
+            raise CancelledError()
+        cache = self.model.make_cache()
+        output = self.model.model(mx.array([branches[0][:prefix]]), cache=cache)
+        states = [
+            value
+            for _, value in tree_flatten([item.state for item in cache])
+            if isinstance(value, mx.array)
+        ]
+        mx.eval(output, *states)
+        scores = []
+        for branch in branches:
+            fork = []
+            for item in cache:
+                if isinstance(item, ArraysCache):
+                    arrays, left_padding, lengths = item.state
+                    fork.append(
+                        ArraysCache.from_state(
+                            (list(arrays), left_padding, lengths), item.meta_state
+                        )
+                    )
+                else:
+                    fork.append(
+                        ConcatenateKVCache.from_state(item.state, item.meta_state)
+                    )
+            scores.append(self._score(branch[prefix:], cancelled, fork))
+        return scores
 
     def _choice(self, payload: ChoiceRequest, kind: str, cancelled: Event) -> dict:
         started = time.perf_counter()
@@ -145,14 +205,38 @@ class MacJevService(_MacService):
                 for prompt in prompts
             ]
             rendered = time.perf_counter()
-            scores = [self._score(branch, cancelled) for branch in branches]
+            cached_tokens = [0] * len(branches)
+            scores = None
+            if (
+                len(branches) <= self._batch_choice_max_branches
+                and max(map(len, branches)) <= self._batch_choice_max_tokens
+            ):
+                scores = self._batch_scores(branches, cancelled)
+            elif payload.use_prefix_cache and self._hybrid_cache and len(branches) >= 4:
+                prefix = next(
+                    (
+                        index
+                        for index, values in enumerate(zip(*branches))
+                        if len(set(values)) > 1
+                    ),
+                    min(map(len, branches)),
+                )
+                if (
+                    prefix >= self._prefix_choice_min_tokens
+                    and prefix * 2 >= max(map(len, branches))
+                    and all(len(branch) > prefix for branch in branches)
+                ):
+                    scores = self._prefix_scores(branches, prefix, cancelled)
+                    cached_tokens[1:] = [prefix] * (len(branches) - 1)
+            if scores is None:
+                scores = [self._score(branch, cancelled) for branch in branches]
             scored = time.perf_counter()
             temperature = payload.temperature or self.temperatures[kind]
             result = choice_result(payload.options, scores, temperature)
             finished = time.perf_counter()
             result.update(
                 candidate_count=len(branches),
-                cached_tokens=[0] * len(branches),
+                cached_tokens=cached_tokens,
                 prompt_tokens=[len(branch) for branch in branches],
                 latency_seconds=finished - started,
                 timing={
@@ -160,7 +244,7 @@ class MacJevService(_MacService):
                     "engine_seconds": scored - rendered,
                     "postprocess_seconds": finished - scored,
                 },
-                prefix_cache_requested=False,
+                prefix_cache_requested=payload.use_prefix_cache,
                 temperature=temperature,
             )
             return result
@@ -184,6 +268,7 @@ class MacJevService(_MacService):
             payload.use_prefix_cache
             and prefix > 0
             and len(branches) > 1
+            and prefix * (len(branches) - 1) >= self._branch_prefix_min_reused_tokens
             and all(len(branch) > prefix for branch in branches)
         ):
             cache = [ConcatenateKVCache() for _ in self.model.layers]
