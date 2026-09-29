@@ -57,6 +57,21 @@ async def _gather_cancel_on_error(coroutines):
         raise
 
 
+async def _compile_serialized(lock, compile_payload, payload):
+    """Retain the processor slot until a cancelled CPU worker has finished."""
+    async with lock:
+        task = asyncio.create_task(asyncio.to_thread(compile_payload, payload))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            while not task.done():
+                with suppress(Exception, asyncio.CancelledError):
+                    await asyncio.shield(task)
+            with suppress(Exception):
+                task.result()
+            raise
+
+
 class _JevService:
     def __init__(
         self,
@@ -525,6 +540,12 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            decision = getattr(raw_request.app.state, "vllm_decision_service", None)
+            if decision is not None:
+                try:
+                    return await decision.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             laya = getattr(raw_request.app.state, "vllm_laya_service", None)
             if laya is not None:
                 try:
@@ -552,6 +573,7 @@ class JevEndpointPlugin:
                 raise HTTPException(status_code=422, detail=str(error)) from error
 
     async def init_state(self, engine_client, state, args) -> None:
+        state.vllm_decision_service = None
         state.vllm_jev_service = None
         state.vllm_laya_service = None
         state.vllm_valen_service = None
@@ -560,16 +582,29 @@ class JevEndpointPlugin:
         valen_manifest = Path(args.model) / "valen_manifest.json"
         vjev_manifest = Path(args.model) / "vjev_manifest.json"
         laya_manifest = Path(args.model) / "laya_manifest.json"
+        decision_manifest = Path(args.model) / "decision_manifest.json"
         if engine_client is None or not (
             manifest.is_file()
             or valen_manifest.is_file()
             or vjev_manifest.is_file()
             or laya_manifest.is_file()
+            or decision_manifest.is_file()
         ):
             return
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
         if max_inflight < 1:
             raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
+        if decision_manifest.is_file():
+            from .decision import DecisionService
+
+            state.vllm_decision_service = DecisionService(
+                engine_client,
+                Path(args.model),
+                getattr(args, "served_model_name", None) or "vllm-jev",
+                engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
+            )
+            return
         if laya_manifest.is_file():
             from .laya import LayaService
 

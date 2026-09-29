@@ -11,6 +11,7 @@
   <a href="docs/guide.md"><b>Documentation</b></a> ·
   <a href="#demos"><b>Demos</b></a> ·
   <a href="#getting-started"><b>Getting Started</b></a> ·
+  <a href="#supported-models"><b>Supported Models</b></a> ·
   <a href="#example"><b>Example</b></a> ·
   <a href="#updates"><b>Updates</b></a>
 </p>
@@ -18,6 +19,12 @@
 ---
 
 ## Demos
+
+### Video understanding: live comparison
+
+![Valen answering 24 questions about an archery video: No vLLM Jev and vLLM Jev](docs/assets/valen-video-live.gif)
+
+The same Valen checkpoint answers **24 structured questions about one video**, using eight sampled frames and one A800 per runtime. In this live run, Valen's PyTorch reference path took **5.31 s**, while vLLM Jev took **1.22 s** (**4.3× faster**); all 24 selected answers agreed. Model loading is excluded. [Watch the MP4](docs/assets/valen-video-live.mp4).
 
 ### Apple Silicon: live image decisions
 
@@ -42,10 +49,10 @@ The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP serve
 vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
 
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
-- **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen text/image decisions through MLX.
+- **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Decision readouts:** scalar candidate branches, marker scores, and Laya's trained decision head.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Multimodal inference:** Valen and vjev vision models accept text and images through the same System One API.
+- **Multimodal inference:** Valen and vjev accept text and images; Valen also accepts [short videos](docs/guide.md#video-input).
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
@@ -95,22 +102,41 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 ## Supported Models
 
-Choose a model and run its command:
+Choose a checkpoint for your platform and run its command. Linux uses native vLLM; Apple Silicon uses MLX, or PyTorch MPS for Laya.
 
-The models below run on Linux. Apple Silicon currently supports Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, all three Laya checkpoints, and Valen. On Mac, MLX runs the Qwen and Valen models; Laya uses PyTorch MPS.
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac | `vllm-jev serve lostargon/Tiny-Jev` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
 
-| Model | Start server |
-|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
-| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
-| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | `vllm-jev serve convaiinnovations/laya` |
-| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | `vllm-jev serve convaiinnovations/laya-multilingual` |
-| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | `vllm-jev serve lostargon/Tiny-Jev` |
-| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
-| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | `vllm-jev serve yah01/vjev-vision` |
-| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | `vllm-jev serve yah01/vjev-vision-pilot` |
+### Additional decision models (experimental)
+
+These text-only checkpoints use the same command and `/v1/systemone` API for Choice, Noul, and Score. Listed platforms have been tested.
+
+| Model | Tested platform | Start server |
+|---|---|---|
+| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux | `vllm-jev serve jaredpalmer/kev-0.8b` |
+| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux | `vllm-jev serve jaredpalmer/kev-4b` |
+| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac | `vllm-jev serve Mapika/decider-0.8b` |
+| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux | `vllm-jev serve Mapika/decider-2b` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux | `vllm-jev serve flock-io/this-that-model-1.0` |
+| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux | `vllm-jev serve flock-io/this-that-model-1.1` |
+| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
+| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux | `vllm-jev serve alibiserikbay/JevK5` |
+| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac | `vllm-jev serve alibiserikbay/JevK5-2B` |
+
+JevK5 currently supports **2–16 options** per question. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
+
+See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental) for limits and request examples.
 
 ## Example
 
@@ -126,9 +152,17 @@ The response contains `answers.intent.choice` and `answers.intent.probabilities`
 
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
-For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). These adapters accept text and images; video input is not yet supported.
+For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). Valen also supports [short MP4 videos](docs/guide.md#video-input) on Linux and Mac.
 
 ## Updates
+
+### 2026-09-29
+
+- Added experimental adapters for [Kev, Decider, Mica, This-That, and JevK5](#additional-decision-models-experimental), with tested Linux and Mac availability listed above.
+
+### 2026-09-28
+
+- Added experimental video input for Valen on Linux and Apple Silicon, including variable-frame-rate clips. [Usage](docs/guide.md#video-input).
 
 ### 2026-09-27
 

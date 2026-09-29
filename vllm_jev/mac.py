@@ -346,11 +346,16 @@ class MacJevService(_MacService):
 
 def serve(checkpoint: Path, model_id: str, *, host: str, port: int) -> None:
     is_valen = (checkpoint / "valen_manifest.json").is_file()
+    is_decision = (checkpoint / "decision_manifest.json").is_file()
     from .laya_export import MODELS as LAYA_MODELS
 
     is_laya = model_id in LAYA_MODELS
 
     def load_service(executor):
+        if is_decision:
+            from .mac_decision import MacDecisionService
+
+            return MacDecisionService(checkpoint, model_id, executor)
         if is_laya:
             from .mac_laya import MacLayaService
 
@@ -370,7 +375,9 @@ def serve(checkpoint: Path, model_id: str, *, host: str, port: int) -> None:
             loop = asyncio.get_running_loop()
             service = await loop.run_in_executor(executor, load_service, executor)
             name = (
-                "vllm_laya_service"
+                "vllm_decision_service"
+                if is_decision
+                else "vllm_laya_service"
                 if is_laya
                 else "vllm_valen_service"
                 if is_valen

@@ -1,6 +1,6 @@
 # User guide
 
-Serve Jev models with vLLM. Send text or images and questions; receive labels, probabilities, yes/no answers, or scores.
+Serve Jev models with vLLM. Send text, images, or supported videos with questions; receive labels, probabilities, yes/no answers, or scores.
 
 ## Installation
 
@@ -21,7 +21,7 @@ source scripts/install_mac.sh
 vllm-jev serve Valen-Team/Valen-Preview-0923
 ```
 
-Valen accepts text and images through `/v1/systemone`. For text-only Choice and batch requests, start OpenJev-0.6B or Tiny-Jev. Laya handles Choice, Noul, and Score through the same `/v1/systemone` route on Mac.
+Valen accepts text, images, and short videos through `/v1/systemone`. For text-only Choice and batch requests, start OpenJev-0.6B or Tiny-Jev. Laya handles Choice, Noul, and Score through the same `/v1/systemone` route on Mac.
 
 OpenJev-0.6B allows 768 tokens for the shared state prefix and 192 tokens for each question-and-candidate branch, including prompt formatting.
 
@@ -52,13 +52,34 @@ Input support depends on the model:
 | [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
 | [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac | `vllm-jev serve lostargon/Tiny-Jev` |
-| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
 
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
-Image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Video input is not supported.
+Image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request; see [Video input](#video-input).
+
+### Additional decision checkpoints (experimental)
+
+These text-only adapters use the same `vllm-jev serve` command and `/v1/systemone` requests for Choice, Noul, and Score. The platforms exercised so far are listed below; other checkpoints in each family remain under validation.
+
+| Model | Tested platform | Start server |
+|---|---|---|
+| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux | `vllm-jev serve jaredpalmer/kev-0.8b` |
+| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux | `vllm-jev serve jaredpalmer/kev-4b` |
+| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac | `vllm-jev serve Mapika/decider-0.8b` |
+| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux | `vllm-jev serve Mapika/decider-2b` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux | `vllm-jev serve flock-io/this-that-model-1.0` |
+| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux | `vllm-jev serve flock-io/this-that-model-1.1` |
+| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
+| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux | `vllm-jev serve alibiserikbay/JevK5` |
+| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac | `vllm-jev serve alibiserikbay/JevK5-2B` |
+
+Linux uses native vLLM pooling; Mac uses MLX. These adapters use only `/v1/systemone`. JevK5 accepts 2–16 options per question; larger option sets and JevK5-Lite are not supported yet. This-That keeps the first 1,536 state tokens before adding the questions.
+
+Tev protocol code is experimental and is not listed as a supported checkpoint; its published weight license is still being clarified.
 
 ## Serving options
 
@@ -188,7 +209,35 @@ print(json.load(response)["answers"]["color"])
 
 `answers.color` contains `choice`, `confidence`, and `probabilities`. The same image request can include Noul and Score questions.
 
+### Video input
+
+Start `vllm-jev serve Valen-Team/Valen-Preview-0923` on Linux or Mac. Video uses the same `/v1/systemone` route and Choice, Noul, and Score questions.
+
+In the Python example above, replace `request["state"]` before sending it:
+
+```python
+video = base64.b64encode(open("clip.mp4", "rb").read()).decode()
+request["state"] = {"messages": [{"role": "user", "content": [
+    {"type": "video_url", "video_url": {
+        "url": f"data:video/mp4;base64,{video}", "num_frames": 8,
+    }},
+    {"type": "text", "text": "Watch the entire video."},
+]}]}
+```
+
+Use one MP4, up to 16 MiB, 30 seconds, 60 fps, and 1080p. `num_frames` defaults to 8 and accepts even values from 2 to 16. Frames are sampled across the clip. Variable-frame-rate clips use an evenly spaced observation timeline. More frames use more context and memory. Video requests can include text; mixed image/video requests and audio are not supported.
+
+Video input is experimental. The Valen preview was trained for image-based Sokoban; check its decisions on your own video tasks.
+
 ## Updates
+
+### 2026-09-29
+
+- Added experimental text decision adapters for Kev, Decider, Mica, This-That, and JevK5. See the [platform table](#additional-decision-checkpoints-experimental).
+
+### 2026-09-28
+
+- Added experimental Valen video input on Linux and Apple Silicon.
 
 ### 2026-09-27
 

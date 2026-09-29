@@ -63,6 +63,10 @@ def verify_files(
 
 def verify(path: Path, *, full: bool = True) -> dict:
     path = path.resolve()
+    if (path / "decision_manifest.json").is_file():
+        from .decision_export import verify_decision
+
+        return verify_decision(path, full=full)
     if (path / "laya_manifest.json").is_file():
         from .laya_export import verify_laya
 

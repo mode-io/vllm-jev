@@ -49,6 +49,12 @@ def main() -> None:
             "laya_markers_v1",
             "valen_qwen_v1",
             "vjev_vision_v1",
+            "kev_pointer_v1",
+            "decider_slot_v1",
+            "task_json_v1",
+            "thisthat_slot_v1",
+            "mica_labels_v1",
+            "jevk5_letters_v1",
         ),
         default="auto",
         help="Checkpoint protocol (default: auto).",
@@ -79,23 +85,9 @@ def main() -> None:
 
     model_id = PROFILES[args.model][0] if args.model in PROFILES else args.model
     checkpoint = Path(model_id)
-    if (
-        sys.platform == "darwin"
-        and not checkpoint.is_dir()
-        and model_id
-        not in (
-            "IamBusy/OpenJev-0.6B",
-            "ZefanCai/Open-Jev-2B",
-            "lostargon/Tiny-Jev",
-            "Valen-Team/Valen-Preview-0923",
-            *LAYA_MODELS,
-        )
-    ):
-        parser.error(
-            "macOS supports Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, Valen, and Laya"
-        )
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
+        decision_manifest = checkpoint / "decision_manifest.json"
         valen_manifest = checkpoint / "valen_manifest.json"
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
@@ -114,14 +106,17 @@ def main() -> None:
             model_id = (
                 json.loads(
                     (
-                        vjev_manifest
+                        decision_manifest
+                        if decision_manifest.is_file()
+                        else vjev_manifest
                         if vjev_manifest.is_file()
                         else valen_manifest
                         if valen_manifest.is_file()
                         else laya_manifest
                     ).read_text()
                 )["source_repository"]
-                if vjev_manifest.is_file()
+                if decision_manifest.is_file()
+                or vjev_manifest.is_file()
                 or valen_manifest.is_file()
                 or laya_manifest.is_file()
                 else "vllm-jev"
@@ -156,6 +151,8 @@ def main() -> None:
     valen_manifest = checkpoint / "valen_manifest.json"
     vjev_manifest = checkpoint / "vjev_manifest.json"
     laya_manifest = checkpoint / "laya_manifest.json"
+    decision_manifest = checkpoint / "decision_manifest.json"
+    is_decision = decision_manifest.is_file()
     is_valen = valen_manifest.is_file()
     is_vjev = vjev_manifest.is_file()
     is_laya = laya_manifest.is_file()
@@ -163,7 +160,9 @@ def main() -> None:
         sys.platform == "darwin" and model_id in LAYA_MODELS
     ):
         manifest_path = (
-            vjev_manifest
+            decision_manifest
+            if is_decision
+            else vjev_manifest
             if is_vjev
             else valen_manifest
             if is_valen
@@ -193,7 +192,10 @@ def main() -> None:
             "--mamba-ssm-cache-dtype float32 --async-scheduling "
             "--gpu-memory-utilization 0.9 --host 127.0.0.1 --port 8795"
         ).split()
-    if is_valen or is_vjev or is_laya:
+    if is_decision:
+        defaults[defaults.index("--convert") + 1] = "embed"
+        defaults.extend(["--dtype", "bfloat16"])
+    if is_valen or is_vjev or is_laya or is_decision:
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,

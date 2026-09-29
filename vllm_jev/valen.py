@@ -7,16 +7,27 @@ import secrets
 import time
 import uuid
 from contextlib import suppress
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
 import torch.nn.functional as functional
 from safetensors.torch import load_file
-from transformers import AutoProcessor
+from transformers.models.qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from vllm import PoolingParams
 
 from .media import MAX_IMAGES_PER_REQUEST, validate_text
 from .media import load_image as _load_image
+from .video import VideoClip, load_video
+
+
+@dataclass
+class ValenMedia:
+    images: list = field(default_factory=list)
+    video: VideoClip | None = None
+    raw_ids: list | None = None
+    base_length: int = 0
+    video_inputs: dict = field(default_factory=dict)
 
 
 def _candidates(question):
@@ -86,7 +97,7 @@ class ValenService:
         max_inflight: int = 128,
     ):
         self.engine_client = engine_client
-        self.processor = AutoProcessor.from_pretrained(
+        self.processor = Qwen3VLProcessor.from_pretrained(
             model_path, local_files_only=True
         )
         self.tokenizer = self.processor.tokenizer
@@ -96,11 +107,15 @@ class ValenService:
         self.model_id = self.model_names[0]
         self.max_length = max_length
         self.semaphore = asyncio.Semaphore(max_inflight)
+        # Bound decoded media retained while requests wait for the engine.
+        self.request_semaphore = asyncio.Semaphore(min(max_inflight, 4))
+        self.compile_lock = asyncio.Lock()
         self.media_kwargs = json.loads(
             (model_path / "valen_manifest.json").read_text()
         ).get("media_kwargs", {})
 
     def _state(self, state):
+        media = ValenMedia()
         if isinstance(state, str):
             validate_text(state)
             messages = [{"role": "user", "content": [{"type": "text", "text": state}]}]
@@ -148,26 +163,58 @@ class ValenService:
                                 "image": _load_image(image_url.get("url")),
                             }
                         )
+                    elif item.get("type") == "video_url":
+                        video_url = item.get("video_url")
+                        if media.video is not None:
+                            raise ValueError("Valen accepts at most one video")
+                        if not isinstance(video_url, dict):
+                            raise ValueError("Valen video_url must contain a data URL")
+                        media.video = load_video(
+                            video_url.get("url"), video_url.get("num_frames", 8)
+                        )
+                        rendered.append({"type": "video"})
                     else:
-                        raise ValueError("Valen supports text and images only")
+                        raise ValueError("Valen supports text, image_url and video_url")
                 messages.append({"role": message["role"], "content": rendered})
         else:
             raise ValueError("Valen state must be text or a messages object")
-        base = self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=False,
-            return_dict=True,
-            return_tensors="pt",
-            processor_kwargs=dict(self.media_kwargs, return_metadata=True),
-        )
-        images = [
+        media.images = [
             item["image"]
             for message in messages
             for item in message["content"]
             if item["type"] == "image"
         ]
-        return base["input_ids"].flatten().tolist(), images
+        if media.video is not None:
+            if media.images:
+                raise ValueError("images and video cannot be mixed in one request")
+            text = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+            media.raw_ids = self.tokenizer.encode(text, add_special_tokens=False)
+            base = self.processor(
+                text=text,
+                videos=[media.video.frames],
+                video_metadata=[dict(media.video.metadata)],
+                do_sample_frames=False,
+                return_tensors="pt",
+                return_metadata=True,
+                **self.media_kwargs,
+            )
+            media.video_inputs = {
+                name: base[name] for name in ("pixel_values_videos", "video_grid_thw")
+            }
+        else:
+            base = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=False,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs=dict(self.media_kwargs, return_metadata=True),
+            )
+        ids = base["input_ids"].flatten().tolist()
+        media.base_length = len(ids)
+        return ids, media
 
     def _compile(self, payload):
         if payload.model not in (None, "vllm-jev", *self.model_names):
@@ -192,7 +239,7 @@ class ValenService:
             prepared.append((identifier, kind, instructions, pairs))
         if candidate_count > 256:
             raise ValueError("System One exceeds 256 candidates")
-        base_ids, images = self._state(payload.state)
+        base_ids, media = self._state(payload.state)
         questions = []
         logical_tokens = len(base_ids)
         compute_tokens = 0
@@ -225,9 +272,9 @@ class ValenService:
                 logical_tokens += len(suffix)
                 compute_tokens += len(full_ids)
             questions.append((identifier, kind, pairs, branches))
-        return questions, images, logical_tokens, compute_tokens
+        return questions, media, logical_tokens, compute_tokens
 
-    async def _score(self, full_ids, positions, decision_position, images, salt):
+    async def _score(self, full_ids, positions, decision_position, media, salt):
         prompt_ids = []
         for token in full_ids:
             if (
@@ -237,9 +284,17 @@ class ValenService:
             ):
                 prompt_ids.append(token)
         prompt = {"prompt_token_ids": prompt_ids, "cache_salt": salt}
-        if images:
+        if media.video is not None:
+            prompt["prompt_token_ids"] = media.raw_ids + full_ids[media.base_length :]
             prompt["multi_modal_data"] = {
-                "image": images[0] if len(images) == 1 else images
+                "video": (
+                    media.video.frames,
+                    dict(media.video.metadata, do_sample_frames=False),
+                )
+            }
+        elif media.images:
+            prompt["multi_modal_data"] = {
+                "image": media.images[0] if len(media.images) == 1 else media.images
             }
         request_id = f"valen-{uuid.uuid4().hex}"
         complete = False
@@ -282,15 +337,37 @@ class ValenService:
                         await self.engine_client.abort(request_id)
 
     async def systemone(self, payload):
+        async with self.request_semaphore:
+            return await self._systemone(payload)
+
+    async def _systemone(self, payload):
         from .endpoint import _gather_cancel_on_error
 
         started = time.perf_counter()
-        questions, images, logical_tokens, compute_tokens = self._compile(payload)
+        # Decode outside the event loop. Serialize the processor and keep its
+        # slot until a cancelled request's bounded decode has actually finished.
+        async with self.compile_lock:
+            compile_task = asyncio.create_task(
+                asyncio.to_thread(self._compile, payload)
+            )
+            try:
+                questions, media, logical_tokens, compute_tokens = await asyncio.shield(
+                    compile_task
+                )
+            except asyncio.CancelledError:
+                while not compile_task.done():
+                    with suppress(Exception, asyncio.CancelledError):
+                        await asyncio.shield(compile_task)
+                with suppress(Exception):
+                    compile_task.result()
+                raise
+        # vLLM processes raw frames itself; only the Mac runner needs these pixels.
+        media.video_inputs.clear()
         salt = secrets.token_hex(16)
         answers = {}
         for identifier, kind, pairs, branches in questions:
             logits_per_branch = await _gather_cancel_on_error(
-                self._score(ids, positions, decision, images, salt)
+                self._score(ids, positions, decision, media, salt)
                 for ids, positions, decision in branches
             )
             logits = [
