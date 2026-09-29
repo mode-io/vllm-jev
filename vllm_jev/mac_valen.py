@@ -50,10 +50,28 @@ class MacValenService(_MacService):
         started = time.perf_counter()
         if cancelled.is_set():
             raise CancelledError()
-        questions, images, logical_tokens, compute_tokens = self.compiler._compile(
+        questions, media, logical_tokens, compute_tokens = self.compiler._compile(
             payload
         )
+        if cancelled.is_set():
+            raise CancelledError()
+        images = media.images
         pixels = grid = image_features = None
+        video_pixels = video_grid = None
+        if media.video is not None:
+            video_pixels = mx.array(media.video_inputs["pixel_values_videos"].numpy())
+            original_grid = mx.array(media.video_inputs["video_grid_thw"].numpy())
+            dtype = self.model.vision_tower.patch_embed.proj.weight.dtype
+            image_features, _ = self.model.vision_tower(
+                video_pixels.astype(dtype), original_grid
+            )
+            mx.eval(image_features)
+            # Qwen3.5 separates temporal patches with timestamp text. MLX 0.6.17
+            # needs the per-patch grid for RoPE; the vision tower uses the full grid.
+            video_grid = mx.array(
+                [[1, h, w] for t, h, w in original_grid.tolist() for _ in range(t)],
+                dtype=mx.int32,
+            )
         if images:
             key = self._image_key(images)
             cached = self._image_cache.get(key) if key is not None else None
@@ -92,6 +110,8 @@ class MacValenService(_MacService):
                     pixel_values=pixels,
                     image_grid_thw=grid,
                     cached_image_features=image_features,
+                    pixel_values_videos=video_pixels,
+                    video_grid_thw=video_grid,
                 )
                 output = self.model.language_model(
                     input_ids,

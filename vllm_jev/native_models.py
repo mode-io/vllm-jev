@@ -20,6 +20,14 @@ from .public_models import prepare as prepare_open_jev
 BRANCH_PROTOCOL = "openjev_branch_v03"
 CHOICE_PROTOCOL = "open_jev_choice"
 TINY_PROTOCOL = "tiny_jev_marker"
+DECISION_PROTOCOLS = (
+    "kev_pointer_v1",
+    "decider_slot_v1",
+    "task_json_v1",
+    "thisthat_slot_v1",
+    "mica_labels_v1",
+    "jevk5_letters_v1",
+)
 BRANCH_FILES = {
     "MANIFEST.json",
     "adapter_config.json",
@@ -51,9 +59,12 @@ def _publish(
         if manifest["prompt_protocol"] != protocol:
             raise ValueError("exported checkpoint protocol does not match the source")
         manifest.update(source_repository=model_id, source_revision=revision)
-        (temporary / "jev_manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n"
+        name = (
+            "decision_manifest.json"
+            if manifest.get("format") == "vllm-jev-decision-v1"
+            else "jev_manifest.json"
         )
+        (temporary / name).write_text(json.dumps(manifest, indent=2) + "\n")
         verify(temporary, full=True)
         temporary.replace(output)
     finally:
@@ -74,6 +85,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         "laya_markers_v1",
         "valen_qwen_v1",
         "vjev_vision_v1",
+        *DECISION_PROTOCOLS,
     ):
         raise ValueError(f"unknown protocol: {protocol}")
     known = {spec[0]: name for name, spec in PROFILES.items()}
@@ -229,7 +241,12 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
     workspace = workspace.resolve()
     output = workspace / "checkpoint" / model_id
     if output.exists():
-        manifest = json.loads((output / "jev_manifest.json").read_text())
+        name = (
+            "decision_manifest.json"
+            if (output / "decision_manifest.json").is_file()
+            else "jev_manifest.json"
+        )
+        manifest = json.loads((output / name).read_text())
         if manifest.get("source_repository") != model_id:
             raise ValueError("cached checkpoint belongs to another repository")
         if protocol not in ("auto", manifest.get("prompt_protocol")):
@@ -239,6 +256,188 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
 
     info = HfApi().model_info(model_id, files_metadata=False, token=False)
     files = {item.rfilename for item in info.siblings}
+    from .decision_protocols import TASK_JSON_MODELS, THIS_THAT_MODELS
+
+    if "jevk5_config.json" in files or protocol == "jevk5_letters_v1":
+        from .decision_export import export_jevk5
+
+        if protocol not in ("auto", "jevk5_letters_v1"):
+            raise ValueError("this checkpoint uses jevk5_letters_v1")
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "*.json",
+                    "*.model",
+                    "merges.txt",
+                    "*.jinja",
+                ],
+            )
+        )
+        return _publish(
+            output,
+            model_id,
+            info.sha,
+            "jevk5_letters_v1",
+            lambda temporary: export_jevk5(source, temporary, model_id, info.sha),
+        )
+    if model_id == "sky7350/Mica-v0.1-4B" or protocol == "mica_labels_v1":
+        from .decision_export import export_mica
+
+        if protocol not in ("auto", "mica_labels_v1"):
+            raise ValueError("this checkpoint uses mica_labels_v1")
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "*.json",
+                    "*.model",
+                    "merges.txt",
+                    "*.jinja",
+                ],
+            )
+        )
+        return _publish(
+            output,
+            model_id,
+            info.sha,
+            "mica_labels_v1",
+            lambda temporary: export_mica(source, temporary, model_id, info.sha),
+        )
+    if model_id in THIS_THAT_MODELS or protocol == "thisthat_slot_v1":
+        from .decision_export import export_thisthat
+
+        if protocol not in ("auto", "thisthat_slot_v1"):
+            raise ValueError("this checkpoint uses thisthat_slot_v1")
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "*.json",
+                    "*.model",
+                    "merges.txt",
+                    "*.jinja",
+                ],
+            )
+        )
+        return _publish(
+            output,
+            model_id,
+            info.sha,
+            "thisthat_slot_v1",
+            lambda temporary: export_thisthat(source, temporary, model_id, info.sha),
+        )
+    if model_id in TASK_JSON_MODELS or protocol == "task_json_v1":
+        from .decision_export import export_task_adapter, export_task_json
+
+        if protocol not in ("auto", "task_json_v1"):
+            raise ValueError("this checkpoint uses task_json_v1")
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "*.json",
+                    "adapter_model.safetensors",
+                    "*.model",
+                    "merges.txt",
+                    "*.jinja",
+                ],
+            )
+        )
+        if (source / "adapter_config.json").is_file():
+            spec = json.loads((source / "adapter_config.json").read_text())
+            base_id = spec.get("base_model_name_or_path")
+            if not isinstance(base_id, str):
+                raise ValueError("decision adapter has no foundation model")
+            base_info = HfApi().model_info(
+                base_id, revision=spec.get("revision"), token=False
+            )
+            base = Path(
+                snapshot_download(
+                    repo_id=base_id,
+                    revision=base_info.sha,
+                    token=False,
+                    cache_dir=os.environ.get("HF_HUB_CACHE"),
+                )
+            )
+
+            def build(temporary):
+                return export_task_adapter(base, source, temporary, model_id, info.sha)
+        else:
+
+            def build(temporary):
+                return export_task_json(source, temporary, model_id, info.sha)
+
+        return _publish(output, model_id, info.sha, "task_json_v1", build)
+    if "decider_config.json" in files or {"head.pt", "adapter_config.json"} <= files:
+        from .decision_export import export_decider, export_kev
+
+        selected = (
+            "decider_slot_v1" if "decider_config.json" in files else "kev_pointer_v1"
+        )
+        if protocol not in ("auto", selected):
+            raise ValueError(f"{model_id} uses {selected}, not {protocol}")
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "*.json",
+                    "head.pt",
+                    "adapter_model.safetensors",
+                    "*.model",
+                    "merges.txt",
+                    "*.jinja",
+                ],
+            )
+        )
+        if selected == "decider_slot_v1":
+
+            def build(temporary):
+                return export_decider(source, temporary, model_id, info.sha)
+        else:
+            import torch
+
+            meta = torch.load(source / "head.pt", map_location="cpu", weights_only=True)
+            if not isinstance(meta.get("base"), str) or "head" not in meta:
+                raise ValueError(
+                    "repository does not contain a Kev pointer-head release"
+                )
+            base_info = HfApi().model_info(
+                meta["base"], revision=meta.get("base_revision"), token=False
+            )
+            base = Path(
+                snapshot_download(
+                    repo_id=meta["base"],
+                    revision=base_info.sha,
+                    token=False,
+                    cache_dir=os.environ.get("HF_HUB_CACHE"),
+                )
+            )
+
+            def build(temporary):
+                return export_kev(base, source, temporary, model_id, info.sha)
+
+        return _publish(output, model_id, info.sha, selected, build)
     if SCALAR_FILES <= files:
         if protocol not in ("auto", CHOICE_PROTOCOL):
             raise ValueError(f"{model_id} uses {CHOICE_PROTOCOL}, not {protocol}")
@@ -404,6 +603,7 @@ def main() -> None:
             "laya_markers_v1",
             "valen_qwen_v1",
             "vjev_vision_v1",
+            *DECISION_PROTOCOLS,
         ),
         default="auto",
     )

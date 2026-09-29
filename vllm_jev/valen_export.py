@@ -188,6 +188,7 @@ def verify_valen(path: Path, *, full: bool = True) -> dict:
             "tokenizer.json",
             "tokenizer_config.json",
             "preprocessor_config.json",
+            "video_preprocessor_config.json",
         ),
         full=full,
     )

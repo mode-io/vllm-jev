@@ -42,10 +42,10 @@ The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP serve
 vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
 
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
-- **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen text/image decisions through MLX.
+- **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Decision readouts:** scalar candidate branches, marker scores, and Laya's trained decision head.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Multimodal inference:** Valen and vjev vision models accept text and images through the same System One API.
+- **Multimodal inference:** Valen and vjev accept text and images; Valen also accepts [short videos](docs/guide.md#video-input).
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
@@ -126,9 +126,17 @@ The response contains `answers.intent.choice` and `answers.intent.probabilities`
 
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
-For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). These adapters accept text and images; video input is not yet supported.
+For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). Valen also supports [short MP4 videos](docs/guide.md#video-input) on Linux and Mac.
 
 ## Updates
+
+### 2026-09-29
+
+- Added [experimental adapters for more decision models](docs/guide.md#additional-decision-checkpoints-experimental), with model-specific prompt and readout validation.
+
+### 2026-09-28
+
+- Added experimental video input for Valen on Linux and Apple Silicon, including variable-frame-rate clips. [Usage](docs/guide.md#video-input).
 
 ### 2026-09-27
 
