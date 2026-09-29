@@ -16,3 +16,5 @@
 - The README's Mac demo uses Maze screenshots from [GameQA-140K](https://huggingface.co/datasets/OpenMOSS-Team/GameQA-140K), via [Valen-Eval-General-5k](https://huggingface.co/datasets/Valen-Team/Valen-Eval-General-5k). The upstream dataset card declares MIT; see [licenses/GameQA-MIT.txt](licenses/GameQA-MIT.txt). Only demo media is included, not the dataset.
 - [MLX](https://github.com/ml-explore/mlx) and [MLX-VLM](https://github.com/Blaizzy/mlx-vlm) provide Apple Silicon inference at runtime. Their source and model weights are not vendored here.
 - [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B) and [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-2B) base weights are downloaded separately and are not included in this repository.
+
+- The README video demo includes archery footage from [nateraw/video-demo](https://huggingface.co/datasets/nateraw/video-demo), mirrored by [Hugging Face video fixtures](https://huggingface.co/datasets/hf-internal-testing/fixtures_videos). The upstream dataset and fixture provenance declare MIT. Only the composed demo media is included.

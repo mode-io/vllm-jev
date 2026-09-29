@@ -20,6 +20,12 @@
 
 ## Demos
 
+### Video understanding: live comparison
+
+![Valen answering 24 questions about an archery video: No vLLM Jev and vLLM Jev](docs/assets/valen-video-live.gif)
+
+The same Valen checkpoint answers **24 structured questions about one video**, using eight sampled frames and one A800 per runtime. In this live run, Valen's PyTorch reference path took **5.31 s**, while vLLM Jev took **1.22 s** (**4.3× faster**); all 24 selected answers agreed. Model loading is excluded. [Watch the MP4](docs/assets/valen-video-live.mp4).
+
 ### Apple Silicon: live image decisions
 
 ![Valen answering six GameQA Maze image questions locally on an Apple Silicon Mac](docs/assets/mac-valen-maze-live.gif)
