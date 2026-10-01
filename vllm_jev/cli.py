@@ -49,6 +49,7 @@ def main() -> None:
             "laya_markers_v1",
             "valen_qwen_v1",
             "vjev_vision_v1",
+            "rsijev_xattn_v1",
             "kev_pointer_v1",
             "decider_slot_v1",
             "task_json_v1",
@@ -91,6 +92,9 @@ def main() -> None:
         valen_manifest = checkpoint / "valen_manifest.json"
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
+        rsijev_manifest = checkpoint / "rsijev_manifest.json"
+        if sys.platform == "darwin" and rsijev_manifest.is_file():
+            parser.error("RSI-Jev serving requires Linux and native vLLM")
         if sys.platform == "darwin" and (checkpoint / "rl_agent_config.json").is_file():
             from .mac_laya import identify_source
 
@@ -108,6 +112,8 @@ def main() -> None:
                     (
                         decision_manifest
                         if decision_manifest.is_file()
+                        else rsijev_manifest
+                        if rsijev_manifest.is_file()
                         else vjev_manifest
                         if vjev_manifest.is_file()
                         else valen_manifest
@@ -116,6 +122,7 @@ def main() -> None:
                     ).read_text()
                 )["source_repository"]
                 if decision_manifest.is_file()
+                or rsijev_manifest.is_file()
                 or vjev_manifest.is_file()
                 or valen_manifest.is_file()
                 or laya_manifest.is_file()
@@ -132,6 +139,8 @@ def main() -> None:
         from huggingface_hub.utils import validate_repo_id
 
         validate_repo_id(model_id)
+        if sys.platform == "darwin" and model_id.startswith("shgao/rsi-jev-"):
+            parser.error("RSI-Jev serving requires Linux and native vLLM")
         checkpoint = workspace / "checkpoint" / model_id
         prepare = [
             "-m",
@@ -152,7 +161,9 @@ def main() -> None:
     vjev_manifest = checkpoint / "vjev_manifest.json"
     laya_manifest = checkpoint / "laya_manifest.json"
     decision_manifest = checkpoint / "decision_manifest.json"
+    rsijev_manifest = checkpoint / "rsijev_manifest.json"
     is_decision = decision_manifest.is_file()
+    is_rsijev = rsijev_manifest.is_file()
     is_valen = valen_manifest.is_file()
     is_vjev = vjev_manifest.is_file()
     is_laya = laya_manifest.is_file()
@@ -162,6 +173,8 @@ def main() -> None:
         manifest_path = (
             decision_manifest
             if is_decision
+            else rsijev_manifest
+            if is_rsijev
             else vjev_manifest
             if is_vjev
             else valen_manifest
@@ -195,7 +208,22 @@ def main() -> None:
     if is_decision:
         defaults[defaults.index("--convert") + 1] = "embed"
         defaults.extend(["--dtype", "bfloat16"])
-    if is_valen or is_vjev or is_laya or is_decision:
+    if is_rsijev:
+        rsijev = json.loads(rsijev_manifest.read_text())
+        defaults[defaults.index("--max-model-len") + 1] = str(rsijev["max_length"])
+        # States come back in the tower's bf16, which halves the transfer and
+        # changes no value; text-only releases skip the vision profile.
+        defaults.extend(
+            [
+                "--dtype",
+                "bfloat16",
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                json.dumps({"image": 4 if rsijev["vision"] else 0, "video": 0}),
+            ]
+        )
+    if is_valen or is_vjev or is_laya or is_decision or is_rsijev:
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,

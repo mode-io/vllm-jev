@@ -138,6 +138,15 @@ JevK5 currently supports **2–16 options** per question. In concurrent Linux ba
 
 See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental) for limits and request examples.
 
+### RSI-Jev (experimental)
+
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+
+RSI-Jev reads each question with a trained option cross-attention head and a fitted per-question calibration. See the [model guide](docs/guide.md#rsi-jev-experimental) for limits.
+
 ## Example
 
 With the server running, send a Choice request:

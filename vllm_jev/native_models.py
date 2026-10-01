@@ -85,6 +85,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         "laya_markers_v1",
         "valen_qwen_v1",
         "vjev_vision_v1",
+        "rsijev_xattn_v1",
         *DECISION_PROTOCOLS,
     ):
         raise ValueError(f"unknown protocol: {protocol}")
@@ -139,6 +140,55 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
         try:
             export_laya(source, temporary, model_id)
             verify_laya(temporary, full=True)
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+        return output
+
+    from .rsijev_export import MODELS as RSIJEV_MODELS
+
+    if model_id in RSIJEV_MODELS:
+        if protocol not in ("auto", "rsijev_xattn_v1"):
+            raise ValueError(f"{model_id} uses rsijev_xattn_v1, not {protocol}")
+        from .rsijev_export import (
+            BASE_FILES,
+            BASE_ID,
+            BASE_REVISION,
+            SOURCE_FILES,
+            export_rsijev,
+            verify_rsijev,
+        )
+
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            manifest = json.loads((output / "rsijev_manifest.json").read_text())
+            if manifest.get("source_repository") != model_id:
+                raise ValueError("cached checkpoint belongs to another repository")
+            verify_rsijev(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=RSIJEV_MODELS[model_id],
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=SOURCE_FILES,
+            )
+        )
+        base = Path(
+            snapshot_download(
+                repo_id=BASE_ID,
+                revision=BASE_REVISION,
+                token=False,
+                cache_dir=os.environ.get("HF_HUB_CACHE"),
+                allow_patterns=BASE_FILES,
+            )
+        )
+        temporary = Path(tempfile.mkdtemp(prefix=".rsijev-", dir=output.parent))
+        try:
+            export_rsijev(source, base, temporary, model_id)
+            verify_rsijev(temporary, full=True)
             temporary.replace(output)
         finally:
             if temporary.exists():
@@ -603,6 +653,7 @@ def main() -> None:
             "laya_markers_v1",
             "valen_qwen_v1",
             "vjev_vision_v1",
+            "rsijev_xattn_v1",
             *DECISION_PROTOCOLS,
         ),
         default="auto",

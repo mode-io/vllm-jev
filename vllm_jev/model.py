@@ -66,6 +66,12 @@ class VllmVjevQwen35ForTokenEmbedding(
     """Native Qwen3.5 image/text token states for vjev's listwise head."""
 
 
+class VllmRsiJevQwen35ForTokenEmbedding(
+    as_embedding_model(Qwen3_5ForConditionalGeneration)
+):
+    """Native Qwen3.5 final states for RSI-Jev's option cross-attention head."""
+
+
 class VllmJevQwen3ForTokenEmbedding(as_embedding_model(Qwen3ForCausalLM)):
     """Native Qwen3 token embeddings for marker-position decision heads."""
 
