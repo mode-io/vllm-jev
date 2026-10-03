@@ -81,6 +81,22 @@ Linux uses native vLLM pooling; Mac uses MLX. These adapters use only `/v1/syste
 
 Tev protocol code is experimental and is not listed as a supported checkpoint; its published weight license is still being clarified.
 
+### RSI-Jev (experimental)
+
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+
+Both use `/v1/systemone` for Choice, Noul, and Score. Each question is one sequence: the state, the instructions, one `- label: description` line per option, and `Answer:`. A trained head reads the option lines and the last token, and a fitted calibration sets one temperature per question. Option labels are part of the prompt, so renaming a label can change the answer.
+
+- Up to 64 questions, with 2–160 options or levels each.
+- A state longer than 2,048 tokens loses tokens from its start; options and the question are kept.
+- JSON states and text-only `state.messages` are sent as compact JSON.
+- v4.0-VL accepts up to 4 PNG/JPEG images as `image_url` parts in `state.messages`. Text parts and images are joined in order with nothing between them, so start the text after an image with a newline: `[image, "\nWhat is shown?"]`. The images share a budget of 1,024 image tokens. A request whose state would cut into an image is rejected.
+
+The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks, so several questions about a short state are each computed in full. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
+
 ## Serving options
 
 Choose a GPU or pass regular vLLM options after the model ID:
@@ -89,7 +105,7 @@ Choose a GPU or pass regular vLLM options after the model ID:
 CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B --port 9000
 ```
 
-On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, 8,192 for Valen, 512 for Laya English, and 1,024 for Laya multilingual and typed decisions. Run `vllm-jev serve --help=all` to see additional vLLM options.
+On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, 8,192 for Valen, 3,072 for RSI-Jev v4.0-VL, 2,048 for RSI-Jev v3.0, 512 for Laya English, and 1,024 for Laya multilingual and typed decisions. Run `vllm-jev serve --help=all` to see additional vLLM options.
 
 On macOS, `vllm-jev serve` supports `--host` and `--port`. Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, and Valen use MLX; Laya uses the published PyTorch MPS runtime. Mac scores and speed may differ from Linux CUDA results.
 
