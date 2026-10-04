@@ -67,6 +67,14 @@ def verify(path: Path, *, full: bool = True) -> dict:
         from .decision_export import verify_decision
 
         return verify_decision(path, full=full)
+    if (path / "clef_manifest.json").is_file():
+        from .clef_export import verify_clef
+
+        return verify_clef(path, full=full)
+    if (path / "rsijev_manifest.json").is_file():
+        from .rsijev_export import verify_rsijev
+
+        return verify_rsijev(path, full=full)
     if (path / "laya_manifest.json").is_file():
         from .laya_export import verify_laya
 
