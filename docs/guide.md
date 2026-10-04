@@ -58,7 +58,7 @@ Input support depends on the model:
 
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
-Image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request; see [Video input](#video-input).
+Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The experimental [RSI-Jev](#rsi-jev-experimental) and [Clef](#clef-experimental) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
 
 ### Additional decision checkpoints (experimental)
 
@@ -90,12 +90,23 @@ Tev protocol code is experimental and is not listed as a supported checkpoint; i
 
 Both use `/v1/systemone` for Choice, Noul, and Score. Each question is one sequence: the state, the instructions, one `- label: description` line per option, and `Answer:`. A trained head reads the option lines and the last token, and a fitted calibration sets one temperature per question. Option labels are part of the prompt, so renaming a label can change the answer.
 
+The adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). Both checkpoints are Linux-only; no MLX/MPS path is available. bf16 probabilities can differ from the author's runtime, and close decisions can select a different label.
+
 - Up to 64 questions, with 2–160 options or levels each.
-- A state longer than 2,048 tokens loses tokens from its start; options and the question are kept.
+- The complete per-question text sequence is limited to 2,048 tokens, including instructions and options. If it exceeds the limit, tokens are removed from the start of the state/instruction prefix; option lines and the answer cue are kept. v4.0-VL image requests have a 3,072-token sequence limit.
 - JSON states and text-only `state.messages` are sent as compact JSON.
 - v4.0-VL accepts up to 4 PNG/JPEG images as `image_url` parts in `state.messages`. Text parts and images are joined in order with nothing between them, so start the text after an image with a newline: `[image, "\nWhat is shown?"]`. The images share a budget of 1,024 image tokens. A request whose state would cut into an image is rejected.
 
-The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks, so several questions about a short state are each computed in full. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. For repeated text or image state across multiple questions, `VLLM_JEV_RSIJEV_FAST_ENCODE=1` optionally tokenizes the shared state once when the released Qwen tokenizer's blank-line boundary can be verified; other tokenizers and truncated heads retain the original path. This changes CPU prompt preparation, not vLLM's cache-block size. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
+The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks; the shared tail outside those blocks is recomputed per question. Multi-question requests can therefore be slower than the author's server, which forks the full KV/GDN state. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
+
+Shared-state tokenization is **disabled by default**. To enable it for repeated text or image state across multiple questions:
+
+```bash
+VLLM_JEV_RSIJEV_FAST_ENCODE=1 \
+  vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b
+```
+
+This follows Shanghua Gao's reference encoding strategy and tokenizes the shared state once when the released Qwen tokenizer's blank-line boundary can be verified. Other tokenizers and truncated prefixes retain the original path. It reduces CPU prompt preparation without changing token IDs, option spans, or decision positions for eligible requests. It does not change vLLM's cache-block size or implement full KV/GDN state forking; a larger fixed cache block is not a universal speed improvement.
 
 ### Clef (experimental)
 
@@ -105,10 +116,13 @@ The export combines the release's fine-tuned text tower, cast to bf16, with the 
 
 Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in one forward pass. A single sequence carries the state, all media, and all questions; the released joint schema head reads every token's hidden state and scores options jointly across questions.
 
+The adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). It is Linux-only; no MLX/MPS path is available. bf16 reference and vLLM paths are not expected to produce bit-identical probabilities, and close decisions can select a different label. Serving and numerical checks do not establish accuracy on a new image or video task.
+
 - Up to 64 questions per request, with up to 255 options for Choice, up to 10 levels for Score, and at most 2,048 options across the entire request (Noul counts as two).
-- A state longer than 16,384 tokens loses tokens from its end; the schema is kept intact.
+- Question IDs and serialized question definitions together must fit within 1 MiB of UTF-8 text. This bound is checked before media processing and tokenization; the state has its separate context-truncation behavior.
+- The default 16,384-token context includes the state, media, schema, and prompt formatting. State tokens that do not fit are removed from its end; the schema is kept intact. A schema and media that exceed the context limit are rejected.
 - Images: up to 8 PNG or JPEG data URLs, 8 MiB each. Pass them in the `images` field as `data:image/png;base64,...` or `data:image/jpeg;base64,...` strings.
-- Video: one MP4 data URL per request in the `videos` field, as `data:video/mp4;base64,...`, up to 16 MiB. By default 8 frames are sampled; pass `{"url": "data:video/mp4;base64,...", "num_frames": N}` (N even, 2–16) to control sampling.
+- Video: one MP4 data URL per request in the `videos` field, as `data:video/mp4;base64,...`, up to 16 MiB, 30 seconds, 60 fps, and 1080p. By default 8 frames are sampled; pass `{"url": "data:video/mp4;base64,...", "num_frames": N}` (N even, 2–16) to control sampling. Images and one video may be combined within the same request.
 - Prefix caching is disabled; every request computes the full sequence so the head can read every token's state.
 
 The export links the released weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef-flash` downloads and prepares the checkpoint automatically. To prepare it from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef-flash`. Export and repo-ID preparation verify all pinned release hashes. Starting an already prepared local checkpoint uses a quicker check of its metadata and head and confirms that its weight shards exist; it does not rehash those large shards on every launch.
@@ -158,7 +172,7 @@ This opt-in cache retains up to two identical decoded images and their visual fe
 | `POST /plugins/vllm-jev/choice` | One multiple-choice question for Open-Jev and Tiny-Jev text models. |
 | `POST /plugins/vllm-jev/batch` | A batch of questions for Open-Jev and Tiny-Jev text models. |
 
-Noul and Score are question types on `/v1/systemone`. One request supports up to 64 questions and 256 candidates.
+Noul and Score are question types on `/v1/systemone`. Question, option, and context budgets depend on the model; consult its [supported-model section](#supported-models). The separate batch Choice route allows up to 64 questions and 256 candidates total.
 
 All three Laya checkpoints use `/v1/systemone` for Choice, Noul, and Score. Their trained decision heads read the options supplied in each request. The English checkpoint allows 192 tokens for question text and options together; multilingual and typed decisions allow 256.
 
@@ -218,7 +232,7 @@ The reply has one Choice result per request under `results`, in the same order.
 
 ### Text and images
 
-Start Valen or either vjev model from the table above. Put image data URLs in `state.messages`; use a `state` string for text-only requests. For a local PNG:
+Start Valen, either vjev model, or RSI-Jev v4.0-VL from the tables above. Put image data URLs in `state.messages`; use a `state` string for text-only requests. RSI-Jev v4.0-VL accepts at most four images and requires its own [context limits](#rsi-jev-experimental). For a local PNG:
 
 ```python
 import base64
@@ -229,7 +243,7 @@ image = base64.b64encode(open("image.png", "rb").read()).decode()
 request = {
     "state": {"messages": [{"role": "user", "content": [
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
-        {"type": "text", "text": "Look at this image."},
+        {"type": "text", "text": "\nLook at this image."},
     ]}]},
     "questions": {"color": {"type": "choice", "instructions": "What color is the object?", "criteria": {"red": "Red", "blue": "Blue"}}},
 }
@@ -241,9 +255,18 @@ print(json.load(response)["answers"]["color"])
 
 `answers.color` contains `choice`, `confidence`, and `probabilities`. The same image request can include Noul and Score questions.
 
+For Clef, start `vllm-jev serve Cloudflare/clef-flash` on Linux and instead put the image data URL in the top-level `images` list. In the example above, replace the state and add the media before sending:
+
+```python
+request["state"] = "Look at this image."
+request["images"] = [f"data:image/png;base64,{image}"]
+```
+
 ### Video input
 
-Start `vllm-jev serve Valen-Team/Valen-Preview-0923` on Linux or Mac. Video uses the same `/v1/systemone` route and Choice, Noul, and Score questions.
+Valen (Linux and Mac) and Clef (Linux only) accept video through `/v1/systemone` with Choice, Noul, and Score questions. Their media fields differ.
+
+For Valen, start `vllm-jev serve Valen-Team/Valen-Preview-0923` on Linux or Mac.
 
 In the Python example above, replace `request["state"]` before sending it:
 
@@ -257,11 +280,28 @@ request["state"] = {"messages": [{"role": "user", "content": [
 ]}]}
 ```
 
-Use one MP4, up to 16 MiB, 30 seconds, 60 fps, and 1080p. `num_frames` defaults to 8 and accepts even values from 2 to 16. Frames are sampled across the clip. Variable-frame-rate clips use an evenly spaced observation timeline. More frames use more context and memory. Video requests can include text; mixed image/video requests and audio are not supported.
+Use one MP4, up to 16 MiB, 30 seconds, 60 fps, and 1080p. `num_frames` defaults to 8 and accepts even values from 2 to 16. Frames are sampled across the clip. Variable-frame-rate clips use an evenly spaced observation timeline. More frames use more context and memory. Valen video requests can include text, but cannot mix images and video.
 
-Video input is experimental. The Valen preview was trained for image-based Sokoban; check its decisions on your own video tasks.
+For Clef, start `vllm-jev serve Cloudflare/clef-flash` on Linux. Use the top-level `videos` list instead of a `state.messages` video part:
+
+```python
+video = base64.b64encode(open("clip.mp4", "rb").read()).decode()
+request["state"] = "Watch the entire video."
+request["videos"] = [{
+    "url": f"data:video/mp4;base64,{video}", "num_frames": 8,
+}]
+```
+
+Clef uses the same clip and frame-count limits and may combine its `images` and `videos` lists in one request, subject to the total context limit. Neither model accepts audio input. Video input is experimental; check decisions on your own tasks. The Valen preview was trained for image-based Sokoban.
 
 ## Updates
+
+### 2026-10-04 · v0.2.0
+
+- Integrated experimental Linux serving for [RSI-Jev](#rsi-jev-experimental) v3.0/v4.0-VL and [Clef-Flash](#clef-experimental), contributed by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4). Their original commits and credit are preserved.
+- Added aggregate Clef request limits of 2,048 options and 1 MiB of question IDs and definitions before tokenization, exact CPU reference checks on a consistent device, and platform tests for Linux startup and Mac rejection.
+- Added default-off RSI-Jev shared-state tokenization based on the author's implementation. Native vLLM hybrid-cache block boundaries and full-state forking remain unchanged.
+- Documented model-specific media formats and limits, and distinguished full hash verification during Clef preparation from quick checks when launching a prepared local checkpoint.
 
 ### 2026-09-29
 

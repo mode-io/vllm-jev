@@ -39,6 +39,11 @@ CONFIG = {
 }
 
 
+@pytest.fixture(autouse=True)
+def cpu_only(monkeypatch):
+    monkeypatch.setenv("VLLM_JEV_RSIJEV_DEVICE", "cpu")
+
+
 def char_tokenizer(path: Path):
     """A character-level fast tokenizer; the vision markers are single tokens."""
     from tokenizers import Regex, Tokenizer, models, pre_tokenizers

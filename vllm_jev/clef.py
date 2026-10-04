@@ -42,6 +42,7 @@ MAX_QUESTIONS = 64
 MAX_CHOICE_OPTIONS = 255
 MAX_SCORE_LEVELS = 10
 MAX_TOTAL_OPTIONS = 2048
+MAX_SCHEMA_BYTES = 1024 * 1024
 MAX_VIDEOS = 1
 
 
@@ -494,6 +495,7 @@ class ClefService:
         if not isinstance(questions, dict) or not 1 <= len(questions) <= MAX_QUESTIONS:
             raise ValueError(f"System One requires 1 to {MAX_QUESTIONS} questions")
         total_options = 0
+        schema_bytes = 0
         for identifier, question in questions.items():
             validate_question(identifier, question)
             total_options += (
@@ -503,8 +505,16 @@ class ClefService:
                 raise ValueError(
                     f"System One accepts at most {MAX_TOTAL_OPTIONS} options per request"
                 )
+            rendered = render(question)
+            schema_bytes += len(identifier.encode("utf-8")) + len(
+                rendered.encode("utf-8")
+            )
+            if schema_bytes > MAX_SCHEMA_BYTES:
+                raise ValueError(
+                    "question IDs and definitions exceed the 1 MiB schema limit"
+                )
             validate_text(identifier)
-            validate_text(render(question))
+            validate_text(rendered)
         validate_text(render(payload.state))
         media_ids, data = self._media(payload)
         ids, encoded = encode(

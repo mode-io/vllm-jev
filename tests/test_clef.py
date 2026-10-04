@@ -46,6 +46,13 @@ QUESTIONS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def cpu_only(monkeypatch):
+    # The fake engine and published reference below both produce CPU tensors.
+    # Keep service construction on that same device, even on GPU test hosts.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+
 def release():
     path = os.environ.get("CLEF_RELEASE")
     if not path or not (Path(path) / "joint_schema_model.py").is_file():
@@ -288,19 +295,7 @@ def test_service_answers_like_the_release(tmp_path):
         )
         for q, row in zip(encoded.questions, logits)
     }
-    assert response["answers"].keys() == expected.keys()
-    # The reference and adapter use equivalent heads, but their bf16 execution
-    # paths can differ slightly in numerical reduction order.
-    for key, target in expected.items():
-        actual = response["answers"][key]
-        assert actual.keys() == target.keys()
-        for field, value in target.items():
-            if field == "probabilities":
-                assert actual[field] == pytest.approx(value, abs=0.01)
-            elif isinstance(value, float):
-                assert actual[field] == pytest.approx(value, abs=0.01)
-            else:
-                assert actual[field] == value
+    assert response["answers"] == expected
     assert response["usage"] == {
         "input_tokens": len(encoded.input_ids),
         "output_tokens": 0,
@@ -355,6 +350,23 @@ def test_large_option_grid_is_rejected_before_tokenization(monkeypatch):
     )
     monkeypatch.setattr(cf, "encode", lambda *a, **k: pytest.fail("tokenizer ran"))
     with pytest.raises(ValueError, match="at most 2048 options per request"):
+        service._compile(payload)
+
+
+def test_large_schema_is_rejected_before_tokenization(monkeypatch):
+    service = cf.ClefService.__new__(cf.ClefService)
+    service.model_names = ["Cloudflare/clef-flash"]
+    payload = SimpleNamespace(
+        model=None,
+        questions={
+            "q": {
+                "type": "choice",
+                "criteria": {"a": "中" * (cf.MAX_SCHEMA_BYTES // 3 + 1), "b": None},
+            }
+        },
+    )
+    monkeypatch.setattr(cf, "encode", lambda *a, **k: pytest.fail("tokenizer ran"))
+    with pytest.raises(ValueError, match="1 MiB schema limit"):
         service._compile(payload)
 
 

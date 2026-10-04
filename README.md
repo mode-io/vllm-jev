@@ -50,9 +50,9 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
-- **Decision readouts:** scalar candidate branches, marker scores, and Laya's trained decision head.
+- **Decision readouts:** scalar candidate branches, marker scores, and trained question or joint-schema heads.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Multimodal inference:** Valen and vjev accept text and images; Valen also accepts [short videos](docs/guide.md#video-input).
+- **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
 - **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
 
 ## Getting Started
@@ -116,7 +116,6 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 
 ### Additional decision models (experimental)
 
@@ -146,7 +145,7 @@ See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
 
-RSI-Jev reads each question with a trained option cross-attention head and a fitted per-question calibration. See the [model guide](docs/guide.md#rsi-jev-experimental) for limits.
+RSI-Jev reads each question with a trained option cross-attention head and a fitted per-question calibration. Its Linux adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). See the [model guide](docs/guide.md#rsi-jev-experimental) for input limits, numerical differences, and the default-off shared-state tokenizer.
 
 ### Clef (experimental)
 
@@ -154,7 +153,7 @@ RSI-Jev reads each question with a trained option cross-attention head and a fit
 |---|---|---|---|
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 
-Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. The joint schema head reads every token's hidden state and scores all questions simultaneously. See the [model guide](docs/guide.md#clef-experimental) for limits.
+Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. The joint schema head reads every token's hidden state and scores all questions simultaneously. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). Requests allow at most 2,048 options in total. See the [model guide](docs/guide.md#clef-experimental) for limits and its image/video request format.
 
 ## Example
 
@@ -170,14 +169,16 @@ The response contains `answers.intent.choice` and `answers.intent.probabilities`
 
 See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
 
-For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow the [image request example](docs/guide.md#text-and-images). Valen also supports [short MP4 videos](docs/guide.md#video-input) on Linux and Mac.
+For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
 ## Updates
 
-### 2026-10-04
+### 2026-10-04 · v0.2.0
 
 - Integrated the community contributions for [RSI-Jev (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) by Shanghua Gao and [Clef-Flash (PR #4)](https://github.com/mode-io/vllm-jev/pull/4) by Arcobalneo, preserving their original commits and credit.
-- Follow-up fixes bound Clef's total options before expensive tokenization, make its bf16 reference test check numerical agreement with an appropriate tolerance, and cover Linux-only startup on both platforms. RSI-Jev gained optional shared-state tokenization for multi-question requests; its native cache-block limitations remain documented.
+- Added experimental Linux serving for RSI-Jev v3.0 (text), RSI-Jev v4.0-VL (text and images), and Clef-Flash (text, images, and video).
+- Clef now rejects requests exceeding 2,048 total options or 1 MiB of question IDs and definitions before expensive tokenization. CPU reference tests keep both readouts on the same device and preserve exact assertions; platform tests cover Linux startup and explicit Mac rejection for these Linux-only adapters.
+- RSI-Jev gained default-off shared-state tokenization for multi-question requests, following the author's implementation. This reduces CPU prompt work; it does not change vLLM's cache blocks or implement full KV/GDN state forking. See the [guide](docs/guide.md#rsi-jev-experimental).
 
 ### 2026-09-29
 
