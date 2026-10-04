@@ -116,6 +116,7 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 
 ### Additional decision models (experimental)
 
@@ -146,6 +147,14 @@ See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
 
 RSI-Jev reads each question with a trained option cross-attention head and a fitted per-question calibration. See the [model guide](docs/guide.md#rsi-jev-experimental) for limits.
+
+### Clef (experimental)
+
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+
+Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. The joint schema head reads every token's hidden state and scores all questions simultaneously. See the [model guide](docs/guide.md#clef-experimental) for limits.
 
 ## Example
 

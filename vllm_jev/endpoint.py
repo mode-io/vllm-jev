@@ -44,6 +44,9 @@ class SystemOneRequest(BaseModel):
     state: Any
     questions: dict[str, dict[str, Any]]
     model: str | None = None
+    # Clef takes media beside the state, as its model card documents.
+    images: list[Any] | None = None
+    videos: list[Any] | None = None
 
 
 async def _gather_cancel_on_error(coroutines):
@@ -546,6 +549,12 @@ class JevEndpointPlugin:
                     return await decision.systemone(payload)
                 except ValueError as error:
                     raise HTTPException(status_code=422, detail=str(error)) from error
+            clef = getattr(raw_request.app.state, "vllm_clef_service", None)
+            if clef is not None:
+                try:
+                    return await clef.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             rsijev = getattr(raw_request.app.state, "vllm_rsijev_service", None)
             if rsijev is not None:
                 try:
@@ -585,12 +594,14 @@ class JevEndpointPlugin:
         state.vllm_valen_service = None
         state.vllm_vjev_service = None
         state.vllm_rsijev_service = None
+        state.vllm_clef_service = None
         manifest = Path(args.model) / "jev_manifest.json"
         valen_manifest = Path(args.model) / "valen_manifest.json"
         vjev_manifest = Path(args.model) / "vjev_manifest.json"
         laya_manifest = Path(args.model) / "laya_manifest.json"
         decision_manifest = Path(args.model) / "decision_manifest.json"
         rsijev_manifest = Path(args.model) / "rsijev_manifest.json"
+        clef_manifest = Path(args.model) / "clef_manifest.json"
         if engine_client is None or not (
             manifest.is_file()
             or valen_manifest.is_file()
@@ -598,6 +609,7 @@ class JevEndpointPlugin:
             or laya_manifest.is_file()
             or decision_manifest.is_file()
             or rsijev_manifest.is_file()
+            or clef_manifest.is_file()
         ):
             return
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
@@ -611,6 +623,17 @@ class JevEndpointPlugin:
                 Path(args.model),
                 getattr(args, "served_model_name", None) or "vllm-jev",
                 engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
+            )
+            return
+        if clef_manifest.is_file():
+            from .clef import ClefService
+
+            state.vllm_clef_service = ClefService(
+                engine_client,
+                Path(args.model),
+                getattr(args, "served_model_name", None) or "clef",
+                engine_client.model_config.max_model_len - 1,
                 max_inflight=max_inflight,
             )
             return

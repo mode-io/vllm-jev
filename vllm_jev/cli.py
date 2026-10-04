@@ -50,6 +50,7 @@ def main() -> None:
             "valen_qwen_v1",
             "vjev_vision_v1",
             "rsijev_xattn_v1",
+            "clef_joint_v1",
             "kev_pointer_v1",
             "decider_slot_v1",
             "task_json_v1",
@@ -93,8 +94,11 @@ def main() -> None:
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
         rsijev_manifest = checkpoint / "rsijev_manifest.json"
+        clef_manifest = checkpoint / "clef_manifest.json"
         if sys.platform == "darwin" and rsijev_manifest.is_file():
             parser.error("RSI-Jev serving requires Linux and native vLLM")
+        if sys.platform == "darwin" and clef_manifest.is_file():
+            parser.error("Clef serving requires Linux and native vLLM")
         if sys.platform == "darwin" and (checkpoint / "rl_agent_config.json").is_file():
             from .mac_laya import identify_source
 
@@ -114,6 +118,8 @@ def main() -> None:
                         if decision_manifest.is_file()
                         else rsijev_manifest
                         if rsijev_manifest.is_file()
+                        else clef_manifest
+                        if clef_manifest.is_file()
                         else vjev_manifest
                         if vjev_manifest.is_file()
                         else valen_manifest
@@ -123,6 +129,7 @@ def main() -> None:
                 )["source_repository"]
                 if decision_manifest.is_file()
                 or rsijev_manifest.is_file()
+                or clef_manifest.is_file()
                 or vjev_manifest.is_file()
                 or valen_manifest.is_file()
                 or laya_manifest.is_file()
@@ -141,6 +148,8 @@ def main() -> None:
         validate_repo_id(model_id)
         if sys.platform == "darwin" and model_id.startswith("shgao/rsi-jev-"):
             parser.error("RSI-Jev serving requires Linux and native vLLM")
+        if sys.platform == "darwin" and model_id.startswith("Cloudflare/clef"):
+            parser.error("Clef serving requires Linux and native vLLM")
         checkpoint = workspace / "checkpoint" / model_id
         prepare = [
             "-m",
@@ -162,8 +171,10 @@ def main() -> None:
     laya_manifest = checkpoint / "laya_manifest.json"
     decision_manifest = checkpoint / "decision_manifest.json"
     rsijev_manifest = checkpoint / "rsijev_manifest.json"
+    clef_manifest = checkpoint / "clef_manifest.json"
     is_decision = decision_manifest.is_file()
     is_rsijev = rsijev_manifest.is_file()
+    is_clef = clef_manifest.is_file()
     is_valen = valen_manifest.is_file()
     is_vjev = vjev_manifest.is_file()
     is_laya = laya_manifest.is_file()
@@ -175,6 +186,8 @@ def main() -> None:
             if is_decision
             else rsijev_manifest
             if is_rsijev
+            else clef_manifest
+            if is_clef
             else vjev_manifest
             if is_vjev
             else valen_manifest
@@ -223,7 +236,29 @@ def main() -> None:
                 json.dumps({"image": 4 if rsijev["vision"] else 0, "video": 0}),
             ]
         )
-    if is_valen or is_vjev or is_laya or is_decision or is_rsijev:
+    if is_clef:
+        clef = json.loads(clef_manifest.read_text())
+        # vLLM schedules at most max_model_len - 1 prompt tokens, so a prompt
+        # of exactly Clef's max_length would never finish.
+        defaults[defaults.index("--max-model-len") + 1] = str(clef["max_length"] + 1)
+        # The head reads every token's state, but a prefix-cache hit returns
+        # states only for the tokens vLLM computed.
+        defaults[defaults.index("--enable-prefix-caching")] = (
+            "--no-enable-prefix-caching"
+        )
+        align = defaults.index("--mamba-cache-mode")
+        del defaults[align : align + 2]
+        defaults.extend(
+            [
+                "--dtype",
+                "bfloat16",
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                json.dumps({"image": 8, "video": 1}),
+            ]
+        )
+    if is_valen or is_vjev or is_laya or is_decision or is_rsijev or is_clef:
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,

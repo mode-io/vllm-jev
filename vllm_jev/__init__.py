@@ -10,6 +10,7 @@ VALEN_QWEN35_ARCHITECTURE = "VllmValenQwen35ForTokenEmbedding"
 VJEV_QWEN35_ARCHITECTURE = "VllmVjevQwen35ForTokenEmbedding"
 LAYA_MODERNBERT_ARCHITECTURE = "VllmLayaModernBertForTokenEmbedding"
 RSIJEV_QWEN35_ARCHITECTURE = "VllmRsiJevQwen35ForTokenEmbedding"
+CLEF_QWEN35_ARCHITECTURE = "VllmClefQwen35ForTokenEmbedding"
 
 
 def register() -> None:
@@ -25,5 +26,6 @@ def register() -> None:
         VJEV_QWEN35_ARCHITECTURE,
         LAYA_MODERNBERT_ARCHITECTURE,
         RSIJEV_QWEN35_ARCHITECTURE,
+        CLEF_QWEN35_ARCHITECTURE,
     ):
         ModelRegistry.register_model(architecture, f"vllm_jev.model:{architecture}")
