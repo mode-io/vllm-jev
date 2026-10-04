@@ -4,6 +4,7 @@ Run with ``python -m pytest tests/test_rsijev.py -q``. Tests marked
 ``reference`` also compare against the published ``rsijev`` package and skip
 when it is not importable; ``RSIJEV_RELEASE`` (a local release directory) and a
 cached ``Qwen/Qwen3.5-2B-Base`` tokenizer enable the real-weight checks.
+``RSIJEV_CHECKPOINT`` enables exact fast-encoding parity on a prepared checkpoint.
 """
 
 import asyncio
@@ -252,6 +253,45 @@ def test_encoding_equals_the_published_encoder():
             assert ids == reference["input_ids"]
             assert spans == [tuple(span) for span in reference["option_span"]]
             assert decision == reference["decision_index"]
+
+
+@pytest.mark.reference
+def test_shared_state_tokenization_preserves_real_qwen_ids():
+    from transformers import AutoTokenizer
+
+    checkpoint = os.environ.get("RSIJEV_CHECKPOINT")
+    if not checkpoint:
+        pytest.skip("RSIJEV_CHECKPOINT is not set")
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint, local_files_only=True)
+    assert rj._can_split_state(tokenizer)
+    questions = [
+        rj.to_question(
+            f"q{i}",
+            {
+                "type": "choice",
+                "instructions": f"For case {i}, decide whether to refund.",
+                "criteria": {
+                    "yes": "Offer refund",
+                    "no": "Decline",
+                    "ask": "Ask first",
+                },
+            },
+            160,
+        )
+        for i in range(8)
+    ]
+    for state in (
+        "A customer requests a refund.",
+        "A customer requests a refund. " * 80,
+        "客户要求退款；请核对收据。 " * 40,
+    ):
+        for max_length in (256, 2048):
+            fast = rj.encode_questions(tokenizer, state, questions, max_length)
+            original = [
+                rj.encode_question(tokenizer, state, q[2], q[3], q[4], max_length)
+                for q in questions
+            ]
+            assert fast == original
 
 
 @pytest.mark.reference
@@ -790,6 +830,7 @@ def test_cli_serves_a_prepared_rsijev_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli.os, "execvpe", lambda exe, argv, env: calls.update(argv=argv)
     )
+    monkeypatch.setattr(cli.sys, "platform", "linux")
     monkeypatch.setattr(cli.sys, "argv", ["vllm-jev", "serve", str(output)])
     cli.main()
     argv = calls["argv"]
@@ -803,3 +844,17 @@ def test_cli_serves_a_prepared_rsijev_checkpoint(tmp_path, monkeypatch):
         "video": 0,
     }
     assert "--enable-prefix-caching" in argv
+
+
+def test_cli_rejects_rsijev_on_mac(tmp_path, monkeypatch, capsys):
+    from vllm_jev import cli
+
+    base, source, model_id, _ = make_release(tmp_path, monkeypatch)
+    output = tmp_path / "out"
+    rx.export_rsijev(source, base, output, model_id)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli.sys, "argv", ["vllm-jev", "serve", str(output)])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+    assert "RSI-Jev serving requires Linux" in capsys.readouterr().err

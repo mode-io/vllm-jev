@@ -288,7 +288,19 @@ def test_service_answers_like_the_release(tmp_path):
         )
         for q, row in zip(encoded.questions, logits)
     }
-    assert response["answers"] == expected
+    assert response["answers"].keys() == expected.keys()
+    # The reference and adapter use equivalent heads, but their bf16 execution
+    # paths can differ slightly in numerical reduction order.
+    for key, target in expected.items():
+        actual = response["answers"][key]
+        assert actual.keys() == target.keys()
+        for field, value in target.items():
+            if field == "probabilities":
+                assert actual[field] == pytest.approx(value, abs=0.01)
+            elif isinstance(value, float):
+                assert actual[field] == pytest.approx(value, abs=0.01)
+            else:
+                assert actual[field] == value
     assert response["usage"] == {
         "input_tokens": len(encoded.input_ids),
         "output_tokens": 0,
@@ -326,6 +338,24 @@ def test_service_sends_collapsed_images(tmp_path):
     ):
         with pytest.raises(ValueError, match=message):
             asyncio.run(service.systemone(SimpleNamespace(**{**vars(payload), **bad})))
+
+
+def test_large_option_grid_is_rejected_before_tokenization(monkeypatch):
+    service = cf.ClefService.__new__(cf.ClefService)
+    service.model_names = ["Cloudflare/clef-flash"]
+    payload = SimpleNamespace(
+        model=None,
+        questions={
+            f"q{i}": {
+                "type": "choice",
+                "criteria": {str(index): None for index in range(255)},
+            }
+            for i in range(64)
+        },
+    )
+    monkeypatch.setattr(cf, "encode", lambda *a, **k: pytest.fail("tokenizer ran"))
+    with pytest.raises(ValueError, match="at most 2048 options per request"):
+        service._compile(payload)
 
 
 def make_release(tmp_path, monkeypatch):
@@ -414,6 +444,7 @@ def test_cli_serves_a_prepared_clef_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli.os, "execvpe", lambda exe, argv, env: calls.update(argv=argv)
     )
+    monkeypatch.setattr(cli.sys, "platform", "linux")
     monkeypatch.setattr(cli.sys, "argv", ["vllm-jev", "serve", str(output)])
     cli.main()
     argv = calls["argv"]
@@ -429,3 +460,17 @@ def test_cli_serves_a_prepared_clef_checkpoint(tmp_path, monkeypatch):
     assert "--no-enable-prefix-caching" in argv
     assert "--enable-prefix-caching" not in argv
     assert "--mamba-cache-mode" not in argv
+
+
+def test_cli_rejects_clef_on_mac(tmp_path, monkeypatch, capsys):
+    from vllm_jev import cli
+
+    source, model_id = make_release(tmp_path, monkeypatch)
+    output = tmp_path / "out"
+    cx.export_clef(source, output, model_id)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli.sys, "argv", ["vllm-jev", "serve", str(output)])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+    assert "Clef serving requires Linux" in capsys.readouterr().err

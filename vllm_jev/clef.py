@@ -41,6 +41,7 @@ NOUL_CRITERIA = {
 MAX_QUESTIONS = 64
 MAX_CHOICE_OPTIONS = 255
 MAX_SCORE_LEVELS = 10
+MAX_TOTAL_OPTIONS = 2048
 MAX_VIDEOS = 1
 
 
@@ -492,8 +493,16 @@ class ClefService:
         questions = payload.questions
         if not isinstance(questions, dict) or not 1 <= len(questions) <= MAX_QUESTIONS:
             raise ValueError(f"System One requires 1 to {MAX_QUESTIONS} questions")
+        total_options = 0
         for identifier, question in questions.items():
             validate_question(identifier, question)
+            total_options += (
+                2 if question["type"] == "noul" else len(question["criteria"])
+            )
+            if total_options > MAX_TOTAL_OPTIONS:
+                raise ValueError(
+                    f"System One accepts at most {MAX_TOTAL_OPTIONS} options per request"
+                )
             validate_text(identifier)
             validate_text(render(question))
         validate_text(render(payload.state))

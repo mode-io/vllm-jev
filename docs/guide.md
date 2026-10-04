@@ -95,7 +95,7 @@ Both use `/v1/systemone` for Choice, Noul, and Score. Each question is one seque
 - JSON states and text-only `state.messages` are sent as compact JSON.
 - v4.0-VL accepts up to 4 PNG/JPEG images as `image_url` parts in `state.messages`. Text parts and images are joined in order with nothing between them, so start the text after an image with a newline: `[image, "\nWhat is shown?"]`. The images share a budget of 1,024 image tokens. A request whose state would cut into an image is rejected.
 
-The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks, so several questions about a short state are each computed in full. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
+The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks, so several questions about a short state are each computed in full. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. For repeated text or image state across multiple questions, `VLLM_JEV_RSIJEV_FAST_ENCODE=1` optionally tokenizes the shared state once when the released Qwen tokenizer's blank-line boundary can be verified; other tokenizers and truncated heads retain the original path. This changes CPU prompt preparation, not vLLM's cache-block size. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
 
 ### Clef (experimental)
 
@@ -105,13 +105,13 @@ The export combines the release's fine-tuned text tower, cast to bf16, with the 
 
 Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in one forward pass. A single sequence carries the state, all media, and all questions; the released joint schema head reads every token's hidden state and scores options jointly across questions.
 
-- Up to 64 questions per request, with up to 255 options for Choice and up to 10 levels for Score.
+- Up to 64 questions per request, with up to 255 options for Choice, up to 10 levels for Score, and at most 2,048 options across the entire request (Noul counts as two).
 - A state longer than 16,384 tokens loses tokens from its end; the schema is kept intact.
 - Images: up to 8 PNG or JPEG data URLs, 8 MiB each. Pass them in the `images` field as `data:image/png;base64,...` or `data:image/jpeg;base64,...` strings.
 - Video: one MP4 data URL per request in the `videos` field, as `data:video/mp4;base64,...`, up to 16 MiB. By default 8 frames are sampled; pass `{"url": "data:video/mp4;base64,...", "num_frames": N}` (N even, 2–16) to control sampling.
 - Prefix caching is disabled; every request computes the full sequence so the head can read every token's state.
 
-The export links the released weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef-flash` downloads and prepares the checkpoint automatically. To prepare it from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef-flash`.
+The export links the released weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef-flash` downloads and prepares the checkpoint automatically. To prepare it from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef-flash`. Export and repo-ID preparation verify all pinned release hashes. Starting an already prepared local checkpoint uses a quicker check of its metadata and head and confirms that its weight shards exist; it does not rehash those large shards on every launch.
 
 ## Serving options
 

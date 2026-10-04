@@ -186,6 +186,100 @@ def encode_question(tokenizer, state, instructions, options, criteria, max_lengt
     return ids, spans, len(ids) - 1
 
 
+# The boundary proof and tokenizer check follow RSI-Jev's `encode_questions`
+# by Shanghua Gao. A different tokenizer always uses the original encoding.
+_QWEN_SPLIT = (
+    "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}|"
+    " ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+"
+)
+_QWEN_PRE = {
+    "type": "Sequence",
+    "pretokenizers": [
+        {
+            "type": "Split",
+            "pattern": {"Regex": _QWEN_SPLIT},
+            "behavior": "Isolated",
+            "invert": False,
+        },
+        {
+            "type": "ByteLevel",
+            "add_prefix_space": False,
+            "trim_offsets": True,
+            "use_regex": False,
+        },
+    ],
+}
+
+
+def _can_split_state(tokenizer):
+    cached = getattr(tokenizer, "_rsijev_splits_after_blank_line", None)
+    if cached is not None:
+        return cached
+    try:
+        spec = json.loads(tokenizer.backend_tokenizer.to_str())
+        supported = (
+            spec.get("normalizer") in (None, {"type": "NFC"})
+            and spec.get("pre_tokenizer") == _QWEN_PRE
+            and spec.get("model", {}).get("type") == "BPE"
+            and not getattr(tokenizer, "split_special_tokens", False)
+            and all(
+                not (token.get("lstrip") or token.get("rstrip"))
+                and "\n" not in token["content"]
+                and "\r" not in token["content"]
+                for token in spec.get("added_tokens", [])
+            )
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        supported = False
+    with suppress(AttributeError):
+        tokenizer._rsijev_splits_after_blank_line = supported
+    return supported
+
+
+def encode_questions(tokenizer, state, questions, max_length):
+    """Tokenize an eligible shared state once; preserve the original token ids."""
+
+    def fallback(q):
+        return encode_question(tokenizer, state, q[2], q[3], q[4], max_length)
+
+    if not state.strip() or not _can_split_state(tokenizer):
+        return [fallback(q) for q in questions]
+    lead = f"{state}\n\n"
+    plans = []
+    texts = {lead: None}
+    for q in questions:
+        _, _, instructions, options, criteria = q
+        head, blocks, tail = render(state, instructions, options, criteria)
+        rest = head[len(lead) :] if head.startswith(lead) else ""
+        if not rest or not rest[0].isprintable() or not rest[0].strip():
+            plans.append(None)
+            continue
+        parts = ["\n" + block for block in blocks]
+        plans.append((rest, parts, tail))
+        for part in (rest, *parts, tail):
+            texts.setdefault(part)
+    encoded = tokenizer(list(texts), add_special_tokens=False)["input_ids"]
+    token_ids = dict(zip(texts, encoded))
+    rows = []
+    for q, plan in zip(questions, plans):
+        if plan is None:
+            rows.append(fallback(q))
+            continue
+        rest, parts, tail = plan
+        ids = token_ids[lead] + token_ids[rest]
+        spans = []
+        for part in parts:
+            start = len(ids)
+            ids += token_ids[part]
+            spans.append((start, len(ids)))
+        ids += token_ids[tail]
+        if len(ids) > max_length:
+            rows.append(fallback(q))
+        else:
+            rows.append((ids, spans, len(ids) - 1))
+    return rows
+
+
 def expand_state(state: str, tokens_per_image) -> str:
     runs = [VISION_START + IMAGE_PAD * n + VISION_END for n in tokens_per_image]
     count = state.count(IMAGE_MARKER)
@@ -409,6 +503,9 @@ class RsiJevService:
             min(max_length, self.config["max_length_image"]) if self.vision else 0
         )
         self.read_prefix_cache = os.environ.get("VLLM_JEV_RSIJEV_PREFIX_CACHE") != "0"
+        self.fast_encode = os.environ.get(
+            "VLLM_JEV_RSIJEV_FAST_ENCODE"
+        ) == "1" and _can_split_state(self.tokenizer)
         self.model_names = [model_id] if isinstance(model_id, str) else model_id
         self.model_id = self.model_names[0]
         self.semaphore = asyncio.Semaphore(max_inflight)
@@ -440,11 +537,20 @@ class RsiJevService:
             state = expand_state(state, counts)
             max_length = self.image_length
             mm = (images, {"size": size}, sum(counts))
+        encodings = (
+            encode_questions(self.tokenizer, state, questions, max_length)
+            if self.fast_encode and len(questions) > 1
+            else [
+                encode_question(
+                    self.tokenizer, state, text, options, criteria, max_length
+                )
+                for _, _, text, options, criteria in questions
+            ]
+        )
         rows = []
-        for key, kind, instructions, options, criteria in questions:
-            ids, spans, decision = encode_question(
-                self.tokenizer, state, instructions, options, criteria, max_length
-            )
+        for (key, kind, _, options, criteria), (ids, spans, decision) in zip(
+            questions, encodings
+        ):
             if mm and sum(token == self.image_pad_id for token in ids) != mm[2]:
                 raise ValueError("the state is too long: truncation would cut an image")
             rows.append((key, kind, options, criteria, ids, spans, decision))

@@ -174,6 +174,11 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-10-04
+
+- Integrated the community contributions for [RSI-Jev (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) by Shanghua Gao and [Clef-Flash (PR #4)](https://github.com/mode-io/vllm-jev/pull/4) by Arcobalneo, preserving their original commits and credit.
+- Follow-up fixes bound Clef's total options before expensive tokenization, make its bf16 reference test check numerical agreement with an appropriate tolerance, and cover Linux-only startup on both platforms. RSI-Jev gained optional shared-state tokenization for multi-question requests; its native cache-block limitations remain documented.
+
 ### 2026-09-29
 
 - Added experimental adapters for [Kev, Decider, Mica, This-That, and JevK5](#additional-decision-models-experimental), with tested Linux and Mac availability listed above.
