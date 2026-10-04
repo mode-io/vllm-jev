@@ -824,10 +824,11 @@ def test_export_refuses_a_changed_release_or_readout(tmp_path, monkeypatch):
         rx.export_rsijev(source, base, tmp_path / "out", model_id)
 
 
-def test_cli_serves_a_prepared_rsijev_checkpoint(tmp_path, monkeypatch):
+@pytest.mark.parametrize("vision", [False, True])
+def test_cli_serves_a_prepared_rsijev_checkpoint(tmp_path, monkeypatch, vision):
     from vllm_jev import cli
 
-    base, source, model_id, _ = make_release(tmp_path, monkeypatch)
+    base, source, model_id, _ = make_release(tmp_path, monkeypatch, vision=vision)
     output = tmp_path / "out"
     rx.export_rsijev(source, base, output, model_id)
     calls = {}
@@ -839,13 +840,13 @@ def test_cli_serves_a_prepared_rsijev_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.sys, "argv", ["vllm-jev", "serve", str(output)])
     cli.main()
     argv = calls["argv"]
-    assert argv[argv.index("--max-model-len") + 1] == "3072"
+    assert argv[argv.index("--max-model-len") + 1] == ("3073" if vision else "2049")
     assert argv[argv.index("--served-model-name") + 1] == model_id
     assert json.loads(argv[argv.index("--pooler-config") + 1]) == {
         "task": "token_embed"
     }
     assert json.loads(argv[argv.index("--limit-mm-per-prompt") + 1]) == {
-        "image": 4,
+        "image": 4 if vision else 0,
         "video": 0,
     }
     assert "--enable-prefix-caching" in argv
@@ -863,3 +864,23 @@ def test_cli_rejects_rsijev_on_mac(tmp_path, monkeypatch, capsys):
         cli.main()
     assert error.value.code == 2
     assert "RSI-Jev serving requires Linux" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("engine_limit", [1024, 2049, 3073])
+def test_endpoint_reserves_scheduler_slot_for_rsijev(
+    tmp_path, monkeypatch, engine_limit
+):
+    from vllm_jev.endpoint import JevEndpointPlugin
+
+    (tmp_path / "rsijev_manifest.json").write_text("{}")
+    limits = []
+
+    def service(engine, path, model_id, max_length, **kwargs):
+        limits.append(max_length)
+        return object()
+
+    monkeypatch.setattr(rj, "RsiJevService", service)
+    engine = SimpleNamespace(model_config=SimpleNamespace(max_model_len=engine_limit))
+    args = SimpleNamespace(model=str(tmp_path), served_model_name="rsi-jev")
+    asyncio.run(JevEndpointPlugin().init_state(engine, SimpleNamespace(), args))
+    assert limits == [engine_limit - 1]

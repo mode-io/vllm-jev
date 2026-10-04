@@ -223,7 +223,8 @@ def main() -> None:
         defaults.extend(["--dtype", "bfloat16"])
     if is_rsijev:
         rsijev = json.loads(rsijev_manifest.read_text())
-        defaults[defaults.index("--max-model-len") + 1] = str(rsijev["max_length"])
+        # Leave the scheduler's final slot outside the model's input budget.
+        defaults[defaults.index("--max-model-len") + 1] = str(rsijev["max_length"] + 1)
         # States come back in the tower's bf16, which halves the transfer and
         # changes no value; text-only releases skip the vision profile.
         defaults.extend(

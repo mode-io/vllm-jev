@@ -543,13 +543,18 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            clef = getattr(raw_request.app.state, "vllm_clef_service", None)
+            if (payload.images or payload.videos) and clef is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="top-level images and videos are supported only by Clef",
+                )
             decision = getattr(raw_request.app.state, "vllm_decision_service", None)
             if decision is not None:
                 try:
                     return await decision.systemone(payload)
                 except ValueError as error:
                     raise HTTPException(status_code=422, detail=str(error)) from error
-            clef = getattr(raw_request.app.state, "vllm_clef_service", None)
             if clef is not None:
                 try:
                     return await clef.systemone(payload)
@@ -644,7 +649,7 @@ class JevEndpointPlugin:
                 engine_client,
                 Path(args.model),
                 getattr(args, "served_model_name", None) or "rsi-jev",
-                engine_client.model_config.max_model_len,
+                engine_client.model_config.max_model_len - 1,
                 max_inflight=max_inflight,
             )
             return

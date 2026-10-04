@@ -12,6 +12,4 @@ if [[ ! -x "$workspace/runtime/bin/python" ]]; then
   uv venv --python 3.12 "$workspace/runtime"
 fi
 uv pip install --python "$workspace/runtime/bin/python" \
-  vllm==0.29.0 transformers==5.10.4 peft==0.20.0
-uv pip install --python "$workspace/runtime/bin/python" \
-  --no-deps -e "$repo_root"
+  -e "$repo_root" transformers==5.10.4 peft==0.20.0
