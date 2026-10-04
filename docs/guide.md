@@ -112,11 +112,12 @@ This follows Shanghua Gao's reference encoding strategy and tokenizes the shared
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
 Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in one forward pass. A single sequence carries the state, all media, and all questions; the released joint schema head reads every token's hidden state and scores options jointly across questions.
 
-The adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). It is Linux-only; no MLX/MPS path is available. bf16 reference and vLLM paths are not expected to produce bit-identical probabilities, and close decisions can select a different label. Serving and numerical checks do not establish accuracy on a new image or video task.
+The adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). Cloudflare publishes two original checkpoints: Clef-Flash (9B, Qwen3.5 backbone) and Clef (27B, Qwen3.8 backbone). They share the same published encoding code and joint-schema protocol, but have distinct pinned weight revisions, head input sizes, and GPU memory requirements. Community GGUF, MLX, and other quantized copies use different packaging and are outside this native checkpoint adapter. Both original checkpoints are Linux-only here; no MLX/MPS path is available. bf16 reference and vLLM paths are not expected to produce bit-identical probabilities, and close decisions can select a different label. Serving and numerical checks do not establish accuracy on a new image or video task.
 
 - Up to 64 questions per request, with up to 255 options for Choice, up to 10 levels for Score, and at most 2,048 options across the entire request (Noul counts as two).
 - Question IDs and serialized question definitions together must fit within 1 MiB of UTF-8 text. This bound is checked before media processing and tokenization; the state has its separate context-truncation behavior.
@@ -125,7 +126,9 @@ The adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/
 - Video: one MP4 data URL per request in the `videos` field, as `data:video/mp4;base64,...`, up to 16 MiB, 30 seconds, 60 fps, and 1080p. By default 8 frames are sampled; pass `{"url": "data:video/mp4;base64,...", "num_frames": N}` (N even, 2–16) to control sampling. Images and one video may be combined within the same request.
 - Prefix caching is disabled; every request computes the full sequence so the head can read every token's state.
 
-The export links the released weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef-flash` downloads and prepares the checkpoint automatically. To prepare it from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef-flash`. Export and repo-ID preparation verify all pinned release hashes. Starting an already prepared local checkpoint uses a quicker check of its metadata and head and confirms that its weight shards exist; it does not rehash those large shards on every launch.
+The export links the selected release's weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef` or `vllm-jev serve Cloudflare/clef-flash` downloads and prepares its pinned checkpoint automatically. To prepare either from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef` (replace the ID with `Cloudflare/clef-flash` for 9B). Export and repo-ID preparation verify all pinned release hashes. Starting an already prepared local checkpoint uses a quicker check of its metadata and head and confirms that its weight shards exist; it does not rehash those large shards on every launch.
+
+The 27B bf16 variant needs substantial GPU memory. In one A800 80 GB test with `--gpu-memory-utilization 0.9` and `--max-num-seqs 8`, vLLM reported 48.73 GiB of loaded model weights, and the sampled serving peak was 73,037 MiB. These are measurements for that configuration, not a minimum hardware requirement.
 
 ## Serving options
 
@@ -255,7 +258,7 @@ print(json.load(response)["answers"]["color"])
 
 `answers.color` contains `choice`, `confidence`, and `probabilities`. The same image request can include Noul and Score questions.
 
-For Clef, start `vllm-jev serve Cloudflare/clef-flash` on Linux and instead put the image data URL in the top-level `images` list. In the example above, replace the state and add the media before sending:
+For either Clef checkpoint, start `vllm-jev serve Cloudflare/clef` or `vllm-jev serve Cloudflare/clef-flash` on Linux and instead put the image data URL in the top-level `images` list. In the example above, replace the state and add the media before sending:
 
 ```python
 request["state"] = "Look at this image."
@@ -282,7 +285,7 @@ request["state"] = {"messages": [{"role": "user", "content": [
 
 Use one MP4, up to 16 MiB, 30 seconds, 60 fps, and 1080p. `num_frames` defaults to 8 and accepts even values from 2 to 16. Frames are sampled across the clip. Variable-frame-rate clips use an evenly spaced observation timeline. More frames use more context and memory. Valen video requests can include text, but cannot mix images and video.
 
-For Clef, start `vllm-jev serve Cloudflare/clef-flash` on Linux. Use the top-level `videos` list instead of a `state.messages` video part:
+For either Clef checkpoint, start `vllm-jev serve Cloudflare/clef` or `vllm-jev serve Cloudflare/clef-flash` on Linux. Use the top-level `videos` list instead of a `state.messages` video part:
 
 ```python
 video = base64.b64encode(open("clip.mp4", "rb").read()).decode()
@@ -295,6 +298,10 @@ request["videos"] = [{
 Clef uses the same clip and frame-count limits and may combine its `images` and `videos` lists in one request, subject to the total context limit. Neither model accepts audio input. Video input is experimental; check decisions on your own tasks. The Valen preview was trained for image-based Sokoban.
 
 ## Updates
+
+### 2026-10-04 · v0.3.0
+
+- Added the pinned [Clef 27B](#clef-experimental) checkpoint to the existing Clef-Flash adapter, with its own weight hashes and head-size check. Both original Cloudflare variants use the same text/image/video SystemOne format on Linux.
 
 ### 2026-10-04 · v0.2.0
 

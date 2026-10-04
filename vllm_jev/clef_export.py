@@ -1,4 +1,4 @@
-"""Prepare the released Clef-Flash checkpoint for native vLLM pooling.
+"""Prepare the released Clef checkpoints for native vLLM pooling.
 
 The release already stores a merged bf16 ``Qwen3_5ForConditionalGeneration``
 backbone. The export links its weight shards unchanged, names the pooling
@@ -18,7 +18,10 @@ from . import CLEF_QWEN35_ARCHITECTURE
 from .checkpoint import sha256, verify_files
 from .clef import PROTOCOL
 
-MODELS = {"Cloudflare/clef-flash": "17f0b0ad64efb65d273590632833508766b2aae6"}
+MODELS = {
+    "Cloudflare/clef-flash": "17f0b0ad64efb65d273590632833508766b2aae6",
+    "Cloudflare/clef": "2f3de3dd85f379784083b0814d997ab627200f0c",
+}
 # sha256 of the released files, so a local copy is checked like a download.
 RELEASE_HASHES = {
     "Cloudflare/clef-flash": {
@@ -35,8 +38,32 @@ RELEASE_HASHES = {
         "processor_config.json": "d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1",
         "chat_template.jinja": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715",
     },
+    "Cloudflare/clef": {
+        "model-00001-of-00012.safetensors": "54d83c1d36631de231876217a8e0c2483eccee8746369a482b79442bdfc5d958",
+        "model-00002-of-00012.safetensors": "464086af08be8e2ec14960a4dcff083ebc39974ade00d79d35497385f960ab3a",
+        "model-00003-of-00012.safetensors": "092212d3a02fafacd6424723eda59d60e5282d2068d68f0e37cb891f63bbb658",
+        "model-00004-of-00012.safetensors": "d06ff197668c782145fafa74bba61bbc296fb27e39afb15fd522918ce3514dc5",
+        "model-00005-of-00012.safetensors": "cc693b8829614a72e0c2be303fb290cf05dbb4d7ded872a817b97bb222a78427",
+        "model-00006-of-00012.safetensors": "e7cce15da2443cb8b84aaed66a9a71f0c87dc9d043f83b5f58f4a89f64ba60ad",
+        "model-00007-of-00012.safetensors": "75fc7e76b57d5d17a5d85fff3e879d07dd33edc885a8ee04ad437a899bcd5307",
+        "model-00008-of-00012.safetensors": "189b15cb6b1af48d5f118951446e15639bfeaf76081d5f20aed1f1b4253afe1d",
+        "model-00009-of-00012.safetensors": "8101e2664bb14684fc7051f2e1f84903dbdf5489b17cae3212ac08a0af744a60",
+        "model-00010-of-00012.safetensors": "a8e69016a1a8dab1c9ce8dd151c0d3224412ab864cf06d3a5e2b8a5775cfdfb8",
+        "model-00011-of-00012.safetensors": "b328d21c36ab384696e40a30ac86a95aaf6dd82da89438ba009cb97d87c1d6b9",
+        "model-00012-of-00012.safetensors": "7505eed910a84ea18e66953572476f8a8a6a6ef54192a6643d6e9cd21a3bb978",
+        "model.safetensors.index.json": "a600c6626eb1eb653a3f078ab3dd1c7a8fab2e71185c7ef3aa923a39aaa637be",
+        "config.json": "c42e88892bd3fd84e8276b2ad90df58c1c3b797676ea161035006a72ad468c58",
+        "joint_head.safetensors": "a010ac04f078e699988e4049cbea5e62c962393f59fec366640b64e8d69a4953",
+        "joint_head_config.json": "890be585d75b981201eb96a35f98a9967afe37bc8d220cfdea2e72d56507534f",
+        "tokenizer.json": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+        "tokenizer_config.json": "91a08f825d370d085d692e04cf117cdd7faad7bf18e996f1e6031b6dab03db72",
+        "processor_config.json": "d89ef49ce9cd37fbf510158e13c1ef063d9286411c1ec9049932dbe0487143b1",
+        "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    },
 }
-SOURCE_FILES = [*RELEASE_HASHES["Cloudflare/clef-flash"], "LICENSE"]
+SOURCE_FILES = sorted(
+    {name for files in RELEASE_HASHES.values() for name in files} | {"LICENSE"}
+)
 COPIED_FILES = (
     "joint_head.safetensors",
     "joint_head_config.json",
@@ -56,6 +83,12 @@ HEAD_CONFIG = {
 }
 
 
+def _head_config(model_id: str) -> dict:
+    if model_id == "Cloudflare/clef":
+        return {**HEAD_CONFIG, "hidden_size": 5120}
+    return HEAD_CONFIG
+
+
 def _link(source: Path, target: Path) -> None:
     """Hard-link a large file when both sides share a file system."""
     try:
@@ -73,7 +106,9 @@ def export_clef(source: Path, output: Path, model_id: str) -> dict:
     for name, digest in hashes.items():
         if sha256(source / name) != digest:
             raise ValueError(f"Clef release checksum mismatch: {name}")
-    if json.loads((source / "joint_head_config.json").read_text()) != HEAD_CONFIG:
+    if json.loads((source / "joint_head_config.json").read_text()) != _head_config(
+        model_id
+    ):
         raise ValueError("unsupported Clef joint head configuration")
     config = json.loads((source / "config.json").read_text())
     if config.get("architectures") != ["Qwen3_5ForConditionalGeneration"]:
@@ -126,7 +161,9 @@ def verify_clef(path: Path, *, full: bool = True) -> dict:
     config = json.loads((path / "config.json").read_text())
     if config.get("architectures") != [CLEF_QWEN35_ARCHITECTURE]:
         raise ValueError("Clef model architecture mismatch")
-    if json.loads((path / "joint_head_config.json").read_text()) != HEAD_CONFIG:
+    if json.loads((path / "joint_head_config.json").read_text()) != _head_config(
+        model_id
+    ):
         raise ValueError("Clef joint head configuration mismatch")
     index = json.loads((path / "model.safetensors.index.json").read_text())
     if "lm_head.weight" not in index["weight_map"]:

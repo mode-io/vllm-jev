@@ -151,9 +151,10 @@ RSI-Jev reads each question with a trained option cross-attention head and a fit
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
-Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. The joint schema head reads every token's hidden state and scores all questions simultaneously. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). Requests allow at most 2,048 options in total. See the [model guide](docs/guide.md#clef-experimental) for limits and its image/video request format.
+The Clef family reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4); the 27B checkpoint uses the same published question encoding and joint-schema head protocol with a larger backbone and input projection. Requests allow at most 2,048 options in total. See the [model guide](docs/guide.md#clef-experimental) for limits and its image/video request format.
 
 ## Example
 
@@ -172,6 +173,10 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
 ## Updates
+
+### 2026-10-04 · v0.3.0
+
+- Extended the original Clef family adapter to the [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) 27B checkpoint. Its revision, weight hashes, and 5,120-dimensional joint head are checked separately from Clef-Flash's 9B release; both retain the same Jev/SystemOne input format and Linux-only native vLLM path.
 
 ### 2026-10-04 · v0.2.0
 
