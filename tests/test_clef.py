@@ -2,7 +2,7 @@
 
 Run with ``python -m pytest tests/test_clef.py -q``. Tests marked
 ``reference`` compare against the release's own ``joint_schema_model.py`` and
-skip unless ``CLEF_RELEASE`` names a local Clef-Flash release directory; only
+skip unless ``CLEF_RELEASE`` names a local Clef release directory; only
 its code, tokenizer, and processor files are read.
 """
 
@@ -443,6 +443,15 @@ def test_export_refuses_a_changed_release(tmp_path, monkeypatch):
     (source / "tokenizer.json").write_text("changed")
     with pytest.raises(ValueError, match="checksum"):
         cx.export_clef(source, tmp_path / "out", model_id)
+
+
+def test_27b_release_requires_its_own_head_shape(tmp_path, monkeypatch):
+    source, test_id = make_release(tmp_path, monkeypatch)
+    monkeypatch.setitem(
+        cx.RELEASE_HASHES, "Cloudflare/clef", cx.RELEASE_HASHES[test_id]
+    )
+    with pytest.raises(ValueError, match="head configuration"):
+        cx.export_clef(source, tmp_path / "out", "Cloudflare/clef")
 
 
 def test_cli_serves_a_prepared_clef_checkpoint(tmp_path, monkeypatch):
