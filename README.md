@@ -173,17 +173,11 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
-### 2026-10-04 · v0.3.1
+### 2026-10-04
 
 - Fixed RSI-Jev requests at the context limit, cached model selection, and invalid media handling.
 - Fixed the Linux helper installer and simplified the setup and model guides.
-
-### 2026-10-04 · v0.3.0
-
 - Added [Clef 27B](https://huggingface.co/Cloudflare/clef) alongside Clef-Flash 9B, with text, image, and video decisions on Linux.
-
-### 2026-10-04 · v0.2.0
-
 - Added experimental Linux serving for RSI-Jev v3.0/v4.0-VL by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and Clef-Flash by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4).
 - Added aggregate request limits for Clef and fixed platform and reference-test issues.
 - Added optional [RSI-Jev shared-state tokenization](docs/guide.md#rsi-jev-experimental) to reduce preparation time for multi-question requests.
