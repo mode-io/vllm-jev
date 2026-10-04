@@ -156,6 +156,9 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
 
         output = workspace / "checkpoint" / model_id
         if output.exists():
+            manifest = json.loads((output / "clef_manifest.json").read_text())
+            if manifest.get("source_repository") != model_id:
+                raise ValueError("cached checkpoint belongs to another repository")
             verify_clef(output, full=True)
             return output
         source = Path(

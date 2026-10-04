@@ -72,7 +72,7 @@ def state_parts(state):
         return validate_text(serialize(state)), []
     contents = []
     for item in candidate:
-        if item["role"] not in CHAT_ROLES:
+        if not isinstance(item["role"], str) or item["role"] not in CHAT_ROLES:
             raise ValueError("chat state has an unsupported message role")
         content = item.get("content")
         if isinstance(content, str):

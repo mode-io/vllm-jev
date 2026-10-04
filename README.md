@@ -50,10 +50,9 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
-- **Decision readouts:** scalar candidate branches, marker scores, and trained question or joint-schema heads.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
-- **Automatic setup:** give the launcher a supported Hugging Face model ID; it selects and verifies the native protocol. Serving does not train.
+- **Automatic setup:** start a supported Hugging Face model ID with one command.
 
 ## Getting Started
 
@@ -145,7 +144,7 @@ See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
 
-RSI-Jev reads each question with a trained option cross-attention head and a fitted per-question calibration. Its Linux adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). See the [model guide](docs/guide.md#rsi-jev-experimental) for input limits, numerical differences, and the default-off shared-state tokenizer.
+The Linux adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). See the [model guide](docs/guide.md#rsi-jev-experimental) for input limits and optional shared-state tokenization.
 
 ### Clef (experimental)
 
@@ -154,7 +153,7 @@ RSI-Jev reads each question with a trained option cross-attention head and a fit
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
-The Clef family reads a state and a schema of typed questions and returns a probability for every allowed option of every question in a single forward pass. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4); the 27B checkpoint uses the same published question encoding and joint-schema head protocol with a larger backbone and input projection. Requests allow at most 2,048 options in total. See the [model guide](docs/guide.md#clef-experimental) for limits and its image/video request format.
+Clef answers all questions about a state in one forward pass, returning a probability for each option. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). See the [model guide](docs/guide.md#clef-experimental) for request limits and image/video examples.
 
 ## Example
 
@@ -174,16 +173,20 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-10-04 · v0.3.1
+
+- Fixed RSI-Jev requests at the context limit, cached model selection, and invalid media handling.
+- Fixed the Linux helper installer and simplified the setup and model guides.
+
 ### 2026-10-04 · v0.3.0
 
-- Extended the original Clef family adapter to the [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) 27B checkpoint. Its revision, weight hashes, and 5,120-dimensional joint head are checked separately from Clef-Flash's 9B release; both retain the same Jev/SystemOne input format and Linux-only native vLLM path.
+- Added [Clef 27B](https://huggingface.co/Cloudflare/clef) alongside Clef-Flash 9B, with text, image, and video decisions on Linux.
 
 ### 2026-10-04 · v0.2.0
 
-- Integrated the community contributions for [RSI-Jev (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) by Shanghua Gao and [Clef-Flash (PR #4)](https://github.com/mode-io/vllm-jev/pull/4) by Arcobalneo, preserving their original commits and credit.
-- Added experimental Linux serving for RSI-Jev v3.0 (text), RSI-Jev v4.0-VL (text and images), and Clef-Flash (text, images, and video).
-- Clef now rejects requests exceeding 2,048 total options or 1 MiB of question IDs and definitions before expensive tokenization. CPU reference tests keep both readouts on the same device and preserve exact assertions; platform tests cover Linux startup and explicit Mac rejection for these Linux-only adapters.
-- RSI-Jev gained default-off shared-state tokenization for multi-question requests, following the author's implementation. This reduces CPU prompt work; it does not change vLLM's cache blocks or implement full KV/GDN state forking. See the [guide](docs/guide.md#rsi-jev-experimental).
+- Added experimental Linux serving for RSI-Jev v3.0/v4.0-VL by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and Clef-Flash by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4).
+- Added aggregate request limits for Clef and fixed platform and reference-test issues.
+- Added optional [RSI-Jev shared-state tokenization](docs/guide.md#rsi-jev-experimental) to reduce preparation time for multi-question requests.
 
 ### 2026-09-29
 
@@ -275,7 +278,7 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 
 ## Contributing
 
-Report bugs and feature requests in [Issues](https://github.com/Egbertjing/vllm-jev/issues). Use [Discussions](https://github.com/Egbertjing/vllm-jev/discussions) for questions and ideas. Submit code changes as [pull requests](https://github.com/Egbertjing/vllm-jev/pulls); the maintainer reviews them before merging.
+Report bugs and feature requests in [Issues](https://github.com/mode-io/vllm-jev/issues). Use [Discussions](https://github.com/mode-io/vllm-jev/discussions) for questions and ideas. Submit code changes as [pull requests](https://github.com/mode-io/vllm-jev/pulls); the maintainer reviews them before merging.
 
 ## License
 

@@ -15,7 +15,6 @@ checkpoint/
 checkpoints/
 public/
 results/
-tests/
 benchmarks/
 local_tests/
 .github/workflows/

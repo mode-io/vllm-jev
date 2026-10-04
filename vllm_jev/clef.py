@@ -67,7 +67,7 @@ def validate_question(identifier: str, question) -> None:
     if not identifier or not isinstance(question, dict):
         raise ValueError("question IDs and definitions must be nonempty")
     kind = question.get("type")
-    if kind not in QUESTION_TYPES:
+    if not isinstance(kind, str) or kind not in QUESTION_TYPES:
         raise ValueError(f"questions.{identifier}: type must be noul, choice or score")
     instructions = question.get("instructions")
     if instructions is not None and not isinstance(instructions, str):
