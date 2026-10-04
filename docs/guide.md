@@ -97,6 +97,22 @@ Both use `/v1/systemone` for Choice, Noul, and Score. Each question is one seque
 
 The export combines the release's fine-tuned text tower, cast to bf16, with the embedding and vision tower of the pinned `Qwen/Qwen3.5-2B-Base`. Questions that share a state reuse vLLM's prefix cache only in whole cache blocks, so several questions about a short state are each computed in full. Set `VLLM_JEV_RSIJEV_PREFIX_CACHE=0` to stop reading the prefix cache. The head runs on the server's GPU; set `VLLM_JEV_RSIJEV_DEVICE=cpu` to move it.
 
+### Clef (experimental)
+
+| Model | Input | Platform | Start server |
+|---|---|---|---|
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+
+Clef reads a state and a schema of typed questions and returns a probability for every allowed option of every question in one forward pass. A single sequence carries the state, all media, and all questions; the released joint schema head reads every token's hidden state and scores options jointly across questions.
+
+- Up to 64 questions per request, with up to 255 options for Choice and up to 10 levels for Score.
+- A state longer than 16,384 tokens loses tokens from its end; the schema is kept intact.
+- Images: up to 8 PNG or JPEG data URLs, 8 MiB each. Pass them in the `images` field as `data:image/png;base64,...` or `data:image/jpeg;base64,...` strings.
+- Video: one MP4 data URL per request in the `videos` field, as `data:video/mp4;base64,...`, up to 16 MiB. By default 8 frames are sampled; pass `{"url": "data:video/mp4;base64,...", "num_frames": N}` (N even, 2–16) to control sampling.
+- Prefix caching is disabled; every request computes the full sequence so the head can read every token's state.
+
+The export links the released weight shards unchanged and writes a `VllmClefQwen35ForTokenEmbedding` pooling config beside them. On first use, `vllm-jev serve Cloudflare/clef-flash` downloads and prepares the checkpoint automatically. To prepare it from a local copy instead, run `python -m vllm_jev.clef_export --source /path/to/release --output /path/to/checkpoint --model-id Cloudflare/clef-flash`.
+
 ## Serving options
 
 Choose a GPU or pass regular vLLM options after the model ID:
@@ -105,7 +121,7 @@ Choose a GPU or pass regular vLLM options after the model ID:
 CUDA_VISIBLE_DEVICES=0 vllm-jev serve ZefanCai/Open-Jev-2B --port 9000
 ```
 
-On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, 8,192 for Valen, 3,072 for RSI-Jev v4.0-VL, 2,048 for RSI-Jev v3.0, 512 for Laya English, and 1,024 for Laya multilingual and typed decisions. Run `vllm-jev serve --help=all` to see additional vLLM options.
+On Linux, the default port is 8795 and the GPU memory budget is 90%. The default maximum sequence length is 4,096 tokens, 8,192 for Valen, 3,072 for RSI-Jev v4.0-VL, 2,048 for RSI-Jev v3.0, 16,384 for Clef, 512 for Laya English, and 1,024 for Laya multilingual and typed decisions. Run `vllm-jev serve --help=all` to see additional vLLM options.
 
 On macOS, `vllm-jev serve` supports `--host` and `--port`. Open-Jev-2B, OpenJev-0.6B, Tiny-Jev, and Valen use MLX; Laya uses the published PyTorch MPS runtime. Mac scores and speed may differ from Linux CUDA results.
 
