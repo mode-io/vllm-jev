@@ -301,6 +301,30 @@ request["videos"] = [{
 
 Clef uses the same clip and frame-count limits and may combine `images` and `videos` in one request, within its context limit. Audio input is not supported. Valen video input is experimental; its preview checkpoint was trained for image-based Sokoban.
 
+## CUDA BF16 matmul precision
+
+To reduce batch-dependent BF16 GEMM rounding in Kev, opt into cuBLASLt with reduced-precision reduction and split-K disabled:
+
+```bash
+VLLM_JEV_BF16_MATMUL=no_splitk vllm-jev serve jaredpalmer/kev-0.8b
+```
+
+The default, `default`, preserves existing PyTorch settings. The general model plugin applies `no_splitk` before warmup/compilation in each process, including spawned GPU workers. The mode is part of vLLM's compile-cache key; adding it requires recompilation of existing caches. Unsupported builds fail at startup; CUDA PyTorch must support cuBLASLt and both BF16 reduction controls (validated with PyTorch 2.13.0+cu130 and vLLM 0.29.0).
+
+This changes process-wide CUDA BLAS/BF16 settings and can change serial probabilities and labels. Model weights and BF16 GEMM outputs remain BF16. These controls do not enforce batch invariance in attention/GDN or other custom kernels, and improved accuracy is not guaranteed. This-That 1.0/1.1/1.2 and Decider-2B tests showed reduced drift but retained long-input probability differences; This-That 1.1 still had Score level flips. Their residual causes have not been traced.
+
+Largest observed throughput loss on an RTX 5090, across short/long HTTP workloads at concurrency 1/8/16:
+
+| Model | Largest observed throughput loss |
+|---|---:|
+| Kev-0.8B | 1.45% |
+| Decider-2B | 0.19% |
+| This-That 1.0 | 4.99% |
+| This-That 1.1 | 2.30% |
+| This-That 1.2 | 3.55% |
+
+These fixed-revision synthetic workloads used compiled BF16 pooling, `max-model-len=2048`, `max-num-seqs=32`, four starts in default → no_splitk → no_splitk → default order, and two five-second timing windows per workload/start. Startup, compilation and warmup were excluded; timing had no tensor tracing or per-request disk writes. For This-That 1.0 long inputs at concurrency 16, throughput was 46.15 → 43.85 requests/s and P95 latency 340.63 → 359.99 ms. Small changes may be measurement variation; other GPUs/workloads can have larger costs. Measure your own throughput and tail latency before deployment.
+
 ## Updates
 
 ### 2026-10-04 · v0.3.1

@@ -15,6 +15,9 @@ CLEF_QWEN35_ARCHITECTURE = "VllmClefQwen35ForTokenEmbedding"
 
 def register() -> None:
     """Register models without importing worker-side implementations."""
+    from .precision import configure_matmul
+
+    configure_matmul()
     from vllm.model_executor.models import ModelRegistry
 
     for architecture in (

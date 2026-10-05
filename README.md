@@ -135,6 +135,8 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 
 JevK5 currently supports **2–16 options** per question. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
 
+The optional CUDA setting `VLLM_JEV_BF16_MATMUL=no_splitk` reduces the reproduced Kev batch-dependent GEMM differences. It changes serial probabilities and leaves residual differences in other tested models. Local RTX 5090 tests measured up to about 5% throughput loss. See [BF16 precision](docs/guide.md#cuda-bf16-matmul-precision) for usage and limits.
+
 See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental) for limits and request examples.
 
 ### RSI-Jev (experimental)
