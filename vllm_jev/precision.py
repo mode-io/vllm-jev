@@ -3,6 +3,7 @@
 import os
 
 MATMUL_ENV = "VLLM_JEV_BF16_MATMUL"
+_configured_mode: str | None = None
 
 
 def matmul_mode() -> str:
@@ -19,11 +20,16 @@ def configure_matmul() -> None:
     Include this setting even in default mode: compiled graphs must not cross
     numerical modes. Registering the getter does not initialize CUDA.
     """
+    global _configured_mode
+
     from vllm import envs
 
     mode = matmul_mode()
-    envs.environment_variables[MATMUL_ENV] = matmul_mode
+    if _configured_mode is not None and mode != _configured_mode:
+        raise RuntimeError(f"Restart the server to change {MATMUL_ENV}.")
     if mode == "default":
+        _configured_mode = mode
+        envs.environment_variables[MATMUL_ENV] = lambda: mode
         return
 
     import torch
@@ -50,3 +56,6 @@ def configure_matmul() -> None:
         torch.backends.cuda.preferred_blas_library(previous_backend)
         matmul.allow_bf16_reduced_precision_reduction = previous_reduction
         raise RuntimeError(f"Cannot enable {MATMUL_ENV}=no_splitk: {error}") from error
+    _configured_mode = mode
+    # Hash the applied mode, even if callers later modify their environment.
+    envs.environment_variables[MATMUL_ENV] = lambda: mode

@@ -309,23 +309,20 @@ To reduce batch-dependent BF16 GEMM rounding in Kev, opt into cuBLASLt with redu
 VLLM_JEV_BF16_MATMUL=no_splitk vllm-jev serve jaredpalmer/kev-0.8b
 ```
 
-The default, `default`, preserves existing PyTorch settings. The general model plugin applies `no_splitk` before warmup/compilation in each process, including spawned GPU workers. The mode is part of vLLM's compile-cache key; adding it requires recompilation of existing caches. Unsupported builds fail at startup; CUDA PyTorch must support cuBLASLt and both BF16 reduction controls (validated with PyTorch 2.13.0+cu130 and vLLM 0.29.0).
+The default preserves existing PyTorch settings. Set the mode before starting the server; changing it requires a restart. Each mode uses a separate compile cache, so the first start may recompile. CUDA PyTorch must support cuBLASLt and both BF16 reduction controls; tested with PyTorch 2.13.0+cu130 and vLLM 0.29.0.
 
-This changes process-wide CUDA BLAS/BF16 settings and can change serial probabilities and labels. Model weights and BF16 GEMM outputs remain BF16. These controls do not enforce batch invariance in attention/GDN or other custom kernels, and improved accuracy is not guaranteed. This-That 1.0/1.1/1.2 and Decider-2B tests showed reduced drift but retained long-input probability differences; This-That 1.1 still had Score level flips. Their residual causes have not been traced.
+The setting applies to all models in the worker process and can change serial probabilities and labels. Weights and GEMM outputs remain BF16. It reduces one source of numerical drift; attention/GDN and other kernels can still vary with batching.
 
-Largest observed throughput loss on an RTX 5090, across short/long HTTP workloads at concurrency 1/8/16:
+In A800 Kev-0.8B stress tests, all three 1,200-request runs completed without unexpected errors. Choice answer flips fell from 196 in default mode to 98 and 96 in two opt-in runs, but the number of affected requests remained similar. These synthetic tests measure repeatability, not accuracy. Decider-2B and This-That also retain differences in the [contributor's tests](https://github.com/mode-io/vllm-jev/pull/5).
 
-| Model | Largest observed throughput loss |
-|---|---:|
-| Kev-0.8B | 1.45% |
-| Decider-2B | 0.19% |
-| This-That 1.0 | 4.99% |
-| This-That 1.1 | 2.30% |
-| This-That 1.2 | 3.55% |
-
-These fixed-revision synthetic workloads used compiled BF16 pooling, `max-model-len=2048`, `max-num-seqs=32`, four starts in default → no_splitk → no_splitk → default order, and two five-second timing windows per workload/start. Startup, compilation and warmup were excluded; timing had no tensor tracing or per-request disk writes. For This-That 1.0 long inputs at concurrency 16, throughput was 46.15 → 43.85 requests/s and P95 latency 340.63 → 359.99 ms. Small changes may be measurement variation; other GPUs/workloads can have larger costs. Measure your own throughput and tail latency before deployment.
+RTX 5090 trials reported up to about 5% throughput loss across the tested models. The A800 runs did not establish a speed benefit. Compare latency and throughput on your workload before enabling the mode.
 
 ## Updates
+
+### 2026-10-05
+
+- Added optional [CUDA BF16 precision control](#cuda-bf16-matmul-precision), contributed by [Qiao / wocqcm2 (PR #5)](https://github.com/mode-io/vllm-jev/pull/5).
+- Fixed precision-mode consistency during repeated initialization; mode changes require a server restart.
 
 ### 2026-10-04 · v0.3.1
 
