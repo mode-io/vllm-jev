@@ -49,6 +49,7 @@ def backend(monkeypatch):
     monkeypatch.setitem(sys.modules, "vllm", SimpleNamespace(envs=envs))
     state.envs = envs
     monkeypatch.delenv(precision.MATMUL_ENV, raising=False)
+    monkeypatch.setattr(precision, "_configured_mode", None)
     return state
 
 
@@ -61,16 +62,35 @@ def test_default_preserves_process_settings_and_registers_cache_factor(backend):
 
 
 def test_no_splitk_sets_controls_and_distinct_cache_factor(backend, monkeypatch):
-    precision.configure_matmul()
-    getter = backend.envs.environment_variables[precision.MATMUL_ENV]
-    default = getter()
+    default = precision.matmul_mode()
     monkeypatch.setenv(precision.MATMUL_ENV, "no_splitk")
     precision.configure_matmul()
+    getter = backend.envs.environment_variables[precision.MATMUL_ENV]
     assert getter() != default
     assert backend.library == "cublaslt"
     assert (backend.matmul.reduced, backend.matmul.splitk) == (False, False)
     precision.configure_matmul()  # General plugin loading can be repeated.
     assert (backend.matmul.reduced, backend.matmul.splitk) == (False, False)
+
+
+@pytest.mark.parametrize("initial", ["default", "no_splitk"])
+def test_mode_change_requires_restart_and_preserves_applied_cache_factor(
+    backend, monkeypatch, initial
+):
+    monkeypatch.setenv(precision.MATMUL_ENV, initial)
+    precision.configure_matmul()
+    getter = backend.envs.environment_variables[precision.MATMUL_ENV]
+    previous = (backend.library, backend.matmul.reduced, backend.matmul.splitk)
+    calls = list(backend.calls)
+
+    other = "no_splitk" if initial == "default" else "default"
+    monkeypatch.setenv(precision.MATMUL_ENV, other)
+    assert getter() == initial
+    with pytest.raises(RuntimeError, match="Restart the server"):
+        precision.configure_matmul()
+    assert backend.envs.environment_variables[precision.MATMUL_ENV]() == initial
+    assert (backend.library, backend.matmul.reduced, backend.matmul.splitk) == previous
+    assert backend.calls == calls
 
 
 def test_invalid_mode_fails_before_backend_mutation(backend, monkeypatch):
@@ -103,6 +123,13 @@ def test_failed_backend_selection_restores_previous_settings(backend, monkeypatc
         precision.configure_matmul()
     assert backend.library == "default"
     assert (backend.matmul.reduced, backend.matmul.splitk) == (True, True)
+    assert precision._configured_mode is None
+    assert precision.MATMUL_ENV not in backend.envs.environment_variables
+
+    monkeypatch.setattr(backend, "preferred_blas_library", previous)
+    precision.configure_matmul()
+    assert backend.envs.environment_variables[precision.MATMUL_ENV]() == "no_splitk"
+    assert (backend.matmul.reduced, backend.matmul.splitk) == (False, False)
 
 
 def test_general_plugin_configures_before_model_registration(monkeypatch):

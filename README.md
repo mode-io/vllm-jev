@@ -135,7 +135,7 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 
 JevK5 currently supports **2–16 options** per question. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
 
-The optional CUDA setting `VLLM_JEV_BF16_MATMUL=no_splitk` reduces the reproduced Kev batch-dependent GEMM differences. It changes serial probabilities and leaves residual differences in other tested models. Local RTX 5090 tests measured up to about 5% throughput loss. See [BF16 precision](docs/guide.md#cuda-bf16-matmul-precision) for usage and limits.
+The optional CUDA setting `VLLM_JEV_BF16_MATMUL=no_splitk` can reduce batch-dependent numerical drift. Kev label changes can remain, including on A800. See [BF16 precision](docs/guide.md#cuda-bf16-matmul-precision) for usage and performance tradeoffs.
 
 See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental) for limits and request examples.
 
@@ -174,6 +174,11 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
 ## Updates
+
+### 2026-10-05
+
+- Added an optional [CUDA BF16 precision mode](docs/guide.md#cuda-bf16-matmul-precision) to reduce batch-dependent rounding, contributed by [Qiao / wocqcm2 (PR #5)](https://github.com/mode-io/vllm-jev/pull/5).
+- Kept precision settings fixed for each server process so compiled models use the intended mode. Restart the server to change it.
 
 ### 2026-10-04
 
