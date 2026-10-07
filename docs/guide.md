@@ -193,7 +193,7 @@ Both settings are required. Send related requests to `/plugins/vllm-jev/choice` 
 }
 ```
 
-Scope salts to the same trusted caller. Without an explicit salt, the Choice endpoint uses a fresh namespace for each request; `/v1/systemone` also uses a fresh namespace per request. A matching tree path is reusable only while all required model states remain cached. Cold paths are removed as capacity is needed, and near-limit inputs bypass checkpoint reads when a private continuation page would not fit.
+Scope salts to the same trusted caller. Without an explicit salt, the Choice endpoint uses a fresh namespace for each request. Supported `/v1/systemone` backends also accept an explicit salt; see [Shared prefixes across System One requests](#shared-prefixes-across-system-one-requests). A matching tree path is reusable only while all required model states remain cached. Cold paths are removed as capacity is needed, and near-limit inputs bypass checkpoint reads when a private continuation page would not fit.
 
 The default budgets are eight namespace trees, 64 recent prompt paths per namespace, and four extra checkpoints; in-use states remain protected until they can be reclaimed. Adjust these with `VLLM_JEV_TREE_TENANTS`, `VLLM_JEV_TREE_PATHS`, and `VLLM_JEV_TREE_CHECKPOINTS`. Checkpoint admission is considered every 16 observed candidate sequences after the initial 16; `VLLM_JEV_TREE_PROMOTE_AFTER` changes that interval.
 
@@ -214,6 +214,29 @@ Noul and Score are question types on `/v1/systemone`. Question, option, and cont
 All three Laya checkpoints use `/v1/systemone` for Choice, Noul, and Score. Their trained decision heads read the options supplied in each request. The English checkpoint allows 192 tokens for question text and options together; multilingual and typed decisions allow 256.
 
 The English and typed-decision releases contain an out-of-range calibration value for Choice requests with 11 or more options. The pinned Laya runtime clamps it; check confidence on your own data for that case.
+
+### Shared prefixes across System One requests
+
+On Linux, the native Open-Jev-2B, Open-Jev-9B, and OpenJev-0.6B sequence-classification backends accept an optional `cache_salt` on `/v1/systemone`. Reuse the same salt for related requests to let their questions reuse eligible resident prefix blocks:
+
+```json
+{
+  "state": "The document shared by these requests...",
+  "cache_salt": "caller-a-document-42",
+  "questions": {
+    "urgent": {
+      "type": "noul",
+      "instructions": "Does this document require urgent action?"
+    }
+  }
+}
+```
+
+The salt must be a string of 1–256 characters containing at least one non-whitespace character. Omitting it or sending `null` preserves a fresh namespace for each HTTP request; all questions within that request share the namespace. Other backends, including Tiny-Jev and Mac services, reject an explicit salt with HTTP 422.
+
+Use this option only for requests from the same trusted caller. In a multi-tenant deployment, have the authenticated gateway assign or validate the namespace; do not let public clients choose another tenant's salt. A salt permits sharing but does not replace vLLM's token and model-state cache identities. Different states reuse only their matching prefix, and different salts cannot share prefix blocks.
+
+Prefix caching must be enabled on the server. Reuse depends on matching prefixes, block boundaries, model support, and available cache capacity; it is not guaranteed by a matching salt alone. `metadata.cached_tokens` reports actual cache hits. Questions are submitted independently, so another HTTP request can use a free engine slot while earlier questions are still running. Cancelling one request aborts its own engine requests; vLLM manages the lifetime of blocks still referenced by others.
 
 ### Choice
 

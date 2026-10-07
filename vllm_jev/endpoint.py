@@ -44,6 +44,14 @@ class SystemOneRequest(BaseModel):
     state: Any
     questions: dict[str, dict[str, Any]]
     model: str | None = None
+    cache_salt: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        pattern=r"\S",
+        strict=True,
+        description="Shared prefix-cache namespace for requests from a trusted caller.",
+    )
     # Clef takes media beside the state, as its model card documents.
     images: list[Any] | None = None
     videos: list[Any] | None = None
@@ -96,6 +104,10 @@ class _JevService:
         self.model_names = [model_id] if isinstance(model_id, str) else model_id
         self.model_id = self.model_names[0]
         self.protocol = protocol
+        self.supports_shared_prefix_cache = protocol in (
+            "open_jev_choice",
+            "openjev_branch_v03",
+        )
         self.temperatures = temperatures or {
             kind: default_temperature for kind in ("choice", "noul", "score")
         }
@@ -315,7 +327,7 @@ async def _system_one(payload: SystemOneRequest, service: _JevService) -> dict:
         raise ValueError("state must be text or JSON")
     if not 1 <= len(payload.questions) <= 64:
         raise ValueError("System One requires 1 to 64 questions")
-    salt = secrets.token_hex(16)
+    salt = payload.cache_salt or secrets.token_hex(16)
     prepared = []
     candidate_count = 0
     for identifier, definition in payload.questions.items():
@@ -543,6 +555,14 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            if payload.cache_salt is not None:
+                service = getattr(raw_request.app.state, "vllm_jev_service", None)
+                if not getattr(service, "supports_shared_prefix_cache", False):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="cache_salt requires a native vLLM Open-Jev "
+                        "sequence-classification backend",
+                    )
             clef = getattr(raw_request.app.state, "vllm_clef_service", None)
             if (payload.images or payload.videos) and clef is None:
                 raise HTTPException(
