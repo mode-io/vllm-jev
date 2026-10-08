@@ -115,6 +115,15 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
+
+<a id="rsi-jev-experimental"></a>
+<a id="clef-experimental"></a>
+
+The RSI-Jev Linux adapter was contributed by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2), and the Clef adapter by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4). See the [RSI-Jev](docs/guide.md#rsi-jev) and [Clef](docs/guide.md#clef) guides for input limits and request formats.
 
 ### Additional decision models (experimental)
 
@@ -139,24 +148,6 @@ The optional CUDA setting `VLLM_JEV_BF16_MATMUL=no_splitk` can reduce batch-depe
 
 See the [model guide](docs/guide.md#additional-decision-checkpoints-experimental) for limits and request examples.
 
-### RSI-Jev (experimental)
-
-| Model | Input | Platform | Start server |
-|---|---|---|---|
-| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
-| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
-
-The Linux adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). See the [model guide](docs/guide.md#rsi-jev-experimental) for input limits and optional shared-state tokenization.
-
-### Clef (experimental)
-
-| Model | Input | Platform | Start server |
-|---|---|---|---|
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
-| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
-
-Clef answers all questions about a state in one forward pass, returning a probability for each option. Its Linux adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). See the [model guide](docs/guide.md#clef-experimental) for request limits and image/video examples.
-
 ## Example
 
 With the server running, send a Choice request:
@@ -177,6 +168,7 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ### 2026-10-08
 
+- Moved RSI-Jev v3.0/v4.0-VL and Clef/Clef-Flash into the main Supported Models table for Linux.
 - Added optional cross-request prefix reuse on `/v1/systemone` for native Open-Jev, contributed by [Shelter Zhou / Sheltercosmo (PR #6)](https://github.com/mode-io/vllm-jev/pull/6). The [guide](docs/guide.md#shared-prefixes-across-system-one-requests) explains trusted salt assignment and limits.
 - Rechecked Open-Jev-2B shared-prefix serving with 3,320 requests at up to 32 concurrent clients, covering mixed decision types, cache isolation, and client-disconnect recovery.
 
@@ -194,7 +186,7 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 - Added [Clef 27B](https://huggingface.co/Cloudflare/clef) alongside Clef-Flash 9B, with text, image, and video decisions on Linux.
 - Added experimental Linux serving for RSI-Jev v3.0/v4.0-VL by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and Clef-Flash by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4).
 - Added aggregate request limits for Clef and fixed platform and reference-test issues.
-- Added optional [RSI-Jev shared-state tokenization](docs/guide.md#rsi-jev-experimental) to reduce preparation time for multi-question requests.
+- Added optional [RSI-Jev shared-state tokenization](docs/guide.md#rsi-jev) to reduce preparation time for multi-question requests.
 
 ### 2026-09-29
 

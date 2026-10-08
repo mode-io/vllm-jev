@@ -55,10 +55,14 @@ Input support depends on the model:
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
-Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The experimental [RSI-Jev](#rsi-jev-experimental) and [Clef](#clef-experimental) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
+Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The [RSI-Jev](#rsi-jev) and [Clef](#clef) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
 
 ### Additional decision checkpoints (experimental)
 
@@ -79,14 +83,11 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 
 Linux uses native vLLM pooling; Mac uses MLX. These adapters use only `/v1/systemone`. JevK5 accepts 2–16 options per question; larger option sets and JevK5-Lite are not supported yet. This-That keeps the first 1,536 state tokens before adding the questions.
 
-### RSI-Jev (experimental)
+<a id="rsi-jev-experimental"></a>
 
-| Model | Input | Platform | Start server |
-|---|---|---|---|
-| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
-| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+### RSI-Jev
 
-Both use `/v1/systemone` for Choice, Noul, and Score. Option labels are part of the prompt, so renaming a label can change the answer.
+RSI-Jev v3.0 (text) and v4.0-VL (text and images) run on Linux and use `/v1/systemone` for Choice, Noul, and Score. Option labels are part of the prompt, so renaming a label can change the answer.
 
 The Linux adapter was contributed by [Shanghua Gao in PR #2](https://github.com/mode-io/vllm-jev/pull/2). Probabilities and close decisions can differ from the author's runtime.
 
@@ -106,14 +107,11 @@ VLLM_JEV_RSIJEV_FAST_ENCODE=1 \
 
 This follows Shanghua Gao's encoding strategy: tokenize the shared state once to reduce CPU preparation time. Requests with unsupported tokenizers or truncated prefixes use the regular path. GPU prefix-cache behavior is unchanged.
 
-### Clef (experimental)
+<a id="clef-experimental"></a>
 
-| Model | Input | Platform | Start server |
-|---|---|---|---|
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
-| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
+### Clef
 
-Clef answers all questions about a state in one forward pass, returning a probability for each option. Text, media, and questions share one input sequence.
+Clef-Flash (9B) and Clef (27B) run on Linux and answer all questions about a state in one forward pass, returning a probability for each option. Text, media, and questions share one input sequence.
 
 The adapter was contributed by [Arcobalneo in PR #4](https://github.com/mode-io/vllm-jev/pull/4). It supports Cloudflare's original bf16 checkpoints on Linux. Quantized GGUF and MLX variants are not supported. Probabilities and close decisions can differ from the author's runtime.
 
@@ -296,7 +294,7 @@ The reply has one Choice result per request under `results`, in the same order.
 
 ### Text and images
 
-Start Valen, either vjev model, or RSI-Jev v4.0-VL from the tables above. Put image data URLs in `state.messages`; use a `state` string for text-only requests. RSI-Jev v4.0-VL accepts at most four images and requires its own [context limits](#rsi-jev-experimental). For a local PNG:
+Start Valen, either vjev model, or RSI-Jev v4.0-VL from the tables above. Put image data URLs in `state.messages`; use a `state` string for text-only requests. RSI-Jev v4.0-VL accepts at most four images and requires its own [context limits](#rsi-jev). For a local PNG:
 
 ```python
 import base64
@@ -378,6 +376,7 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 ### 2026-10-08
 
+- Moved RSI-Jev v3.0/v4.0-VL and Clef/Clef-Flash into the main Supported Models table for Linux.
 - Added optional [System One shared-prefix caching](#shared-prefixes-across-system-one-requests) for native Open-Jev, contributed by [Shelter Zhou / Sheltercosmo (PR #6)](https://github.com/mode-io/vllm-jev/pull/6).
 - Clarified gateway-issued salt requirements and live request validation.
 - Rechecked Open-Jev-2B shared-prefix serving with 3,320 requests at up to 32 concurrent clients, covering mixed decision types, cache isolation, and client-disconnect recovery.
@@ -396,13 +395,13 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 ### 2026-10-04 · v0.3.0
 
-- Added [Clef 27B](#clef-experimental) alongside Clef-Flash 9B, with text, image, and video decisions on Linux.
+- Added [Clef 27B](#clef) alongside Clef-Flash 9B, with text, image, and video decisions on Linux.
 
 ### 2026-10-04 · v0.2.0
 
-- Added experimental Linux serving for [RSI-Jev](#rsi-jev-experimental) v3.0/v4.0-VL by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and [Clef-Flash](#clef-experimental) by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4).
+- Added experimental Linux serving for [RSI-Jev](#rsi-jev) v3.0/v4.0-VL by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2) and [Clef-Flash](#clef) by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4).
 - Added aggregate request limits for Clef and fixed platform and reference-test issues.
-- Added optional [RSI-Jev shared-state tokenization](#rsi-jev-experimental) to reduce preparation time for multi-question requests.
+- Added optional [RSI-Jev shared-state tokenization](#rsi-jev) to reduce preparation time for multi-question requests.
 
 ### 2026-09-29
 
