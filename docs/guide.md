@@ -171,6 +171,36 @@ VLLM_JEV_MAC_IMAGE_CACHE=1 vllm-jev serve Valen-Team/Valen-Preview-0923
 
 This opt-in cache retains up to two identical decoded images and their visual features in process memory until eviction or shutdown. It helps repeated single-image requests; new images use the normal path. Multi-image requests and large entries bypass the cache.
 
+### Online prefix cache (experimental)
+
+For repeated Open-Jev-2B text requests on Linux, an optional prefix tree learns shared token paths and retains complete Attention and GDN states at selected positions. It is **disabled by default** and has been tested with Open-Jev-2B on an A800 using vLLM 0.29.0.
+
+Enable it when starting the server:
+
+```bash
+VLLM_JEV_ONLINE_PREFIX_CACHE=1 \
+  vllm-jev serve ZefanCai/Open-Jev-2B --prefix-match-unit 16
+```
+
+Both settings are required. Send related requests to `/plugins/vllm-jev/choice` with the same `cache_salt` to reuse their shared prefix across requests:
+
+```json
+{
+  "state": "The document shared by these requests...",
+  "question": "Which action does the document support?",
+  "options": ["Approve", "Request more information", "Decline"],
+  "cache_salt": "caller-a-document-42"
+}
+```
+
+Scope salts to the same trusted caller. Without an explicit salt, the Choice endpoint uses a fresh namespace for each request. Supported `/v1/systemone` backends also accept an explicit salt; see [Shared prefixes across System One requests](#shared-prefixes-across-system-one-requests). A matching tree path is reusable only while all required model states remain cached. Cold paths are removed as capacity is needed, and near-limit inputs bypass checkpoint reads when a private continuation page would not fit.
+
+The default budgets are eight namespace trees, 64 recent prompt paths per namespace, and four extra checkpoints; in-use states remain protected until they can be reclaimed. Adjust these with `VLLM_JEV_TREE_TENANTS`, `VLLM_JEV_TREE_PATHS`, and `VLLM_JEV_TREE_CHECKPOINTS`. Checkpoint admission is considered every 16 observed candidate sequences after the initial 16; `VLLM_JEV_TREE_PROMOTE_AFTER` changes that interval.
+
+Creating checkpoints adds computation and GPU-memory cost. In the evaluated mixed-article workload, this mode did **not** improve throughput, and selected labels sometimes changed. Benchmark it on your own request pattern before enabling it for production. Other models and multimodal inputs have not been validated with this mode. Unset `VLLM_JEV_ONLINE_PREFIX_CACHE` and restart to return to ordinary vLLM caching.
+
+The Python tree and component eviction design reference [SGLang's Unified Radix Cache](https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/mem_cache/unified_cache/components/README.md), including its Full/Mamba state-validity and cascade-eviction rules.
+
 ## HTTP API
 
 | Route | What it does |
@@ -184,6 +214,29 @@ Noul and Score are question types on `/v1/systemone`. Question, option, and cont
 All three Laya checkpoints use `/v1/systemone` for Choice, Noul, and Score. Their trained decision heads read the options supplied in each request. The English checkpoint allows 192 tokens for question text and options together; multilingual and typed decisions allow 256.
 
 The English and typed-decision releases contain an out-of-range calibration value for Choice requests with 11 or more options. The pinned Laya runtime clamps it; check confidence on your own data for that case.
+
+### Shared prefixes across System One requests
+
+On Linux, the native Open-Jev-2B, Open-Jev-9B, and OpenJev-0.6B sequence-classification backends accept an optional `cache_salt` on `/v1/systemone`. Reuse the same salt for related requests to let their questions reuse eligible resident prefix blocks:
+
+```json
+{
+  "state": "The document shared by these requests...",
+  "cache_salt": "caller-a-document-42",
+  "questions": {
+    "urgent": {
+      "type": "noul",
+      "instructions": "Does this document require urgent action?"
+    }
+  }
+}
+```
+
+The salt must be a string of 1–256 characters containing at least one non-whitespace character. Omitting it or sending `null` preserves a fresh namespace for each HTTP request; all questions within that request share the namespace. Other backends, including Tiny-Jev and Mac services, reject an explicit salt with HTTP 422.
+
+Use this option only for requests from the same trusted caller. In a multi-tenant deployment, have the authenticated gateway assign or validate the namespace; do not let public clients choose another tenant's salt. A salt permits sharing but does not replace vLLM's token and model-state cache identities. Different states reuse only their matching prefix, and different salts cannot share prefix blocks.
+
+Prefix caching must be enabled on the server. Reuse depends on matching prefixes, block boundaries, model support, and available cache capacity; it is not guaranteed by a matching salt alone. `metadata.cached_tokens` reports actual cache hits. Questions are submitted independently, so another HTTP request can use a free engine slot while earlier questions are still running. Cancelling one request aborts its own engine requests; vLLM manages the lifetime of blocks still referenced by others.
 
 ### Choice
 
@@ -321,6 +374,8 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 ### 2026-10-05
 
+- Added the default-off [online prefix-cache experiment](#online-prefix-cache-experimental) with bounded tree growth, hybrid-state eviction, and cancellation/reset cleanup.
+- Fixed full-context pooling and partial-page continuation limits in the experimental cache path.
 - Added optional [CUDA BF16 precision control](#cuda-bf16-matmul-precision), contributed by [Qiao / wocqcm2 (PR #5)](https://github.com/mode-io/vllm-jev/pull/5).
 - Fixed precision-mode consistency during repeated initialization; mode changes require a server restart.
 

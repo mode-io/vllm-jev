@@ -15,6 +15,8 @@ CLEF_QWEN35_ARCHITECTURE = "VllmClefQwen35ForTokenEmbedding"
 
 def register() -> None:
     """Register models without importing worker-side implementations."""
+    import os
+
     from .precision import configure_matmul
 
     configure_matmul()
@@ -32,3 +34,7 @@ def register() -> None:
         CLEF_QWEN35_ARCHITECTURE,
     ):
         ModelRegistry.register_model(architecture, f"vllm_jev.model:{architecture}")
+    if os.environ.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":
+        from .online_prefix import install
+
+        install()

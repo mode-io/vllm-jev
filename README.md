@@ -177,6 +177,8 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ### 2026-10-05
 
+- Added an experimental [online prefix cache](docs/guide.md#online-prefix-cache-experimental) for repeated Open-Jev-2B text requests on Linux, disabled by default.
+- Added bounded cache eviction and state cleanup for cancellation, cache reset, and full-context pooling requests in the experimental path.
 - Added an optional [CUDA BF16 precision mode](docs/guide.md#cuda-bf16-matmul-precision) to reduce batch-dependent rounding, contributed by [Qiao / wocqcm2 (PR #5)](https://github.com/mode-io/vllm-jev/pull/5).
 - Kept precision settings fixed for each server process so compiled models use the intended mode. Restart the server to change it.
 
