@@ -189,11 +189,11 @@ Both settings are required. Send related requests to `/plugins/vllm-jev/choice` 
   "state": "The document shared by these requests...",
   "question": "Which action does the document support?",
   "options": ["Approve", "Request more information", "Decline"],
-  "cache_salt": "caller-a-document-42"
+  "cache_salt": "<random secret assigned by your authenticated gateway>"
 }
 ```
 
-Scope salts to the same trusted caller. Without an explicit salt, the Choice endpoint uses a fresh namespace for each request. Supported `/v1/systemone` backends also accept an explicit salt; see [Shared prefixes across System One requests](#shared-prefixes-across-system-one-requests). A matching tree path is reusable only while all required model states remain cached. Cold paths are removed as capacity is needed, and near-limit inputs bypass checkpoint reads when a private continuation page would not fit.
+Use an unpredictable salt issued by an authenticated gateway, as described in [Shared prefixes across System One requests](#shared-prefixes-across-system-one-requests). Without an explicit salt, the Choice endpoint uses a fresh namespace for each request. A matching tree path is reusable only while all required model states remain cached. Cold paths are removed as capacity is needed, and near-limit inputs bypass checkpoint reads when a private continuation page would not fit.
 
 The default budgets are eight namespace trees, 64 recent prompt paths per namespace, and four extra checkpoints; in-use states remain protected until they can be reclaimed. Adjust these with `VLLM_JEV_TREE_TENANTS`, `VLLM_JEV_TREE_PATHS`, and `VLLM_JEV_TREE_CHECKPOINTS`. Checkpoint admission is considered every 16 observed candidate sequences after the initial 16; `VLLM_JEV_TREE_PROMOTE_AFTER` changes that interval.
 
@@ -222,7 +222,7 @@ On Linux, the native Open-Jev-2B, Open-Jev-9B, and OpenJev-0.6B sequence-classif
 ```json
 {
   "state": "The document shared by these requests...",
-  "cache_salt": "caller-a-document-42",
+  "cache_salt": "<random secret assigned by your authenticated gateway>",
   "questions": {
     "urgent": {
       "type": "noul",
@@ -232,7 +232,9 @@ On Linux, the native Open-Jev-2B, Open-Jev-9B, and OpenJev-0.6B sequence-classif
 }
 ```
 
-The salt must be a string of 1–256 characters containing at least one non-whitespace character. Omitting it or sending `null` preserves a fresh namespace for each HTTP request; all questions within that request share the namespace. Other backends, including Tiny-Jev and Mac services, reject an explicit salt with HTTP 422.
+The salt above is a placeholder. The gateway should generate an unpredictable value for each trusted caller, for example with `secrets.token_urlsafe(32)`, and reuse that value only within its intended trust group. Do not use a user name, document ID, or other guessable identifier.
+
+The salt must be a string of 1–256 characters containing at least one non-whitespace character. Omitting it or sending `null` preserves a fresh namespace for each HTTP request; all questions within that request share the namespace. Invalid salts return HTTP 400 on the pinned vLLM 0.29 server. Other backends, including Tiny-Jev and Mac services, reject an explicit salt.
 
 Use this option only for requests from the same trusted caller. In a multi-tenant deployment, have the authenticated gateway assign or validate the namespace; do not let public clients choose another tenant's salt. A salt permits sharing but does not replace vLLM's token and model-state cache identities. Different states reuse only their matching prefix, and different salts cannot share prefix blocks.
 
@@ -371,6 +373,11 @@ In A800 Kev-0.8B stress tests, all three 1,200-request runs completed without un
 RTX 5090 trials reported up to about 5% throughput loss across the tested models. The A800 runs did not establish a speed benefit. Compare latency and throughput on your workload before enabling the mode.
 
 ## Updates
+
+### 2026-10-08
+
+- Added optional [System One shared-prefix caching](#shared-prefixes-across-system-one-requests) for native Open-Jev, contributed by [Shelter Zhou / Sheltercosmo (PR #6)](https://github.com/mode-io/vllm-jev/pull/6).
+- Clarified gateway-issued salt requirements and live request validation.
 
 ### 2026-10-05
 

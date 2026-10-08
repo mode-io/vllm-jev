@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-jev"
-version = "0.3.2"
+version = "0.3.3"
 description = "Native vLLM pooling and endpoint integration for Jev candidate scoring"
 readme = "README.md"
 requires-python = ">=3.12"
