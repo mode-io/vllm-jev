@@ -137,6 +137,19 @@ def test_live_namespace_isolation_and_partial_prefix(server):
     assert 0 <= changed["metadata"]["cached_tokens"] < warm["metadata"]["cached_tokens"]
 
 
+@pytest.mark.parametrize("salt", ["  ", 12, "x" * 257])
+def test_live_invalid_namespace_returns_vllm_error(server, salt):
+    response = server.post(
+        "/v1/systemone",
+        json={
+            "state": "A customer requests a refund.",
+            "cache_salt": salt,
+            "questions": {"urgent": {"type": "noul", "instructions": "Is it urgent?"}},
+        },
+    )
+    assert response.status_code == 400
+
+
 def test_live_cached_and_uncached_decisions_agree(server):
     url = os.environ.get("VLLM_JEV_TEST_UNCACHED_URL")
     if not url:

@@ -175,6 +175,10 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-10-08
+
+- Added optional cross-request prefix reuse on `/v1/systemone` for native Open-Jev, contributed by [Shelter Zhou / Sheltercosmo (PR #6)](https://github.com/mode-io/vllm-jev/pull/6). The [guide](docs/guide.md#shared-prefixes-across-system-one-requests) explains trusted salt assignment and limits.
+
 ### 2026-10-05
 
 - Added an experimental [online prefix cache](docs/guide.md#online-prefix-cache-experimental) for repeated Open-Jev-2B text requests on Linux, disabled by default.

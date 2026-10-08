@@ -1,6 +1,6 @@
 """vLLM Jev: candidate scores via vLLM's native pooling engine."""
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 ARCHITECTURE = "VllmJevQwen35ForSequenceClassification"
 QWEN3_ARCHITECTURE = "VllmJevQwen3ForSequenceClassification"
