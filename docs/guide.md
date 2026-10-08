@@ -240,6 +240,8 @@ Use this option only for requests from the same trusted caller. In a multi-tenan
 
 Prefix caching must be enabled on the server. Reuse depends on matching prefixes, block boundaries, model support, and available cache capacity; it is not guaranteed by a matching salt alone. `metadata.cached_tokens` reports actual cache hits. Questions are submitted independently, so another HTTP request can use a free engine slot while earlier questions are still running. Cancelling one request aborts its own engine requests; vLLM manages the lifetime of blocks still referenced by others.
 
+Cached and fresh-prefix runs can produce slightly different probabilities. In our BF16 rerun, near-tied Score levels sometimes swapped order even though the returned expected score changed only slightly.
+
 ### Choice
 
 Send a `state`, `question`, and 2–255 `options`:
@@ -378,6 +380,7 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 - Added optional [System One shared-prefix caching](#shared-prefixes-across-system-one-requests) for native Open-Jev, contributed by [Shelter Zhou / Sheltercosmo (PR #6)](https://github.com/mode-io/vllm-jev/pull/6).
 - Clarified gateway-issued salt requirements and live request validation.
+- Rechecked Open-Jev-2B shared-prefix serving with 3,320 requests at up to 32 concurrent clients, covering mixed decision types, cache isolation, and client-disconnect recovery.
 
 ### 2026-10-05
 
