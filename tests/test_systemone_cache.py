@@ -316,8 +316,8 @@ def test_shared_instruction_template_preserves_media_and_schema(
     assert body["questions"]["urgent"]["instructions"] == "Is it urgent?"
 
 
-def test_layout_rejected_for_marker_backend(endpoint, configured_template):
-    configured_template({"layout": "instructions-first"})
+def test_full_prompt_rejected_for_marker_backend(endpoint, configured_template):
+    configured_template({"choice_prompt": "{state} {instructions} {candidate}"})
     engine = RecordingEngine()
     service = endpoint._JevService(engine, Tokenizer(), protocol="openjev_branch_v03")
     response = TestClient(app_for(endpoint, service)).post(

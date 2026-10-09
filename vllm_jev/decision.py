@@ -17,6 +17,7 @@ from transformers import AutoTokenizer
 from vllm import PoolingParams
 
 from .decision_protocols import jevk5_prompt, mica_prompt, packed_slots, task_prompt
+from .decision_template import current_template
 
 
 def _json(value):
@@ -319,7 +320,12 @@ class DecisionCompiler:
             def user(text):
                 return encode(re.sub(r"<\|([A-Za-z0-9_]+)\|>", r"<¦\1¦>", text))
 
-            ids = list(base) + [self.special[1]] + user(instructions)
+            instruction_ids = [self.special[1]] + user(instructions)
+            ids = (
+                instruction_ids + list(base)
+                if current_template().instructions_first
+                else list(base) + instruction_ids
+            )
             positions = []
             for option in options:
                 ids += [self.special[2]] + user(option) + [self.special[3]]
@@ -328,7 +334,11 @@ class DecisionCompiler:
             positions.append(len(ids) - 1)
         else:
             ids = list(base)
-            piece = "\n\nQuestion: " + instructions + "\nOptions:"
+            if current_template().instructions_first:
+                ids = encode("Question: " + instructions + "\n\n") + ids
+                piece = "\nOptions:"
+            else:
+                piece = "\n\nQuestion: " + instructions + "\nOptions:"
             if len(options) <= 10:
                 piece += "".join(
                     f"\n({self.labels[i]}) {o}" for i, o in enumerate(options)

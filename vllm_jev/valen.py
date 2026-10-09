@@ -16,6 +16,7 @@ from safetensors.torch import load_file
 from transformers.models.qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from vllm import PoolingParams
 
+from .decision_template import current_template
 from .media import MAX_IMAGES_PER_REQUEST, validate_text
 from .media import load_image as _load_image
 from .video import VideoClip, load_video
@@ -114,7 +115,7 @@ class ValenService:
             (model_path / "valen_manifest.json").read_text()
         ).get("media_kwargs", {})
 
-    def _state(self, state):
+    def _state(self, state, instruction_prefix=None):
         media = ValenMedia()
         if isinstance(state, str):
             validate_text(state)
@@ -178,6 +179,17 @@ class ValenService:
                 messages.append({"role": message["role"], "content": rendered})
         else:
             raise ValueError("Valen state must be text or a messages object")
+        if instruction_prefix is not None:
+            index = 0
+            while index < len(messages) and messages[index]["role"] == "system":
+                index += 1
+            messages.insert(
+                index,
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": instruction_prefix}],
+                },
+            )
         media.images = [
             item["image"]
             for message in messages
@@ -239,11 +251,20 @@ class ValenService:
             prepared.append((identifier, kind, instructions, pairs))
         if candidate_count > 256:
             raise ValueError("System One exceeds 256 candidates")
-        base_ids, media = self._state(payload.state)
+        if current_template().instructions_first:
+            prefix = "\n".join(
+                f"Task {i + 1}: {kind}\nQuestion {i + 1}: {instructions}"
+                for i, (_, kind, instructions, _) in enumerate(prepared)
+            )
+            base_ids, media = self._state(payload.state, prefix)
+        else:
+            base_ids, media = self._state(payload.state)
         questions = []
         logical_tokens = len(base_ids)
         compute_tokens = 0
-        for identifier, kind, instructions, pairs in prepared:
+        for question_index, (identifier, kind, instructions, pairs) in enumerate(
+            prepared
+        ):
             groups = [[pair] for pair in pairs] if kind == "score" else [pairs]
             branches = []
             for group in groups:
@@ -257,7 +278,13 @@ class ValenService:
                     )
 
                 append(
-                    "Task: " + kind + "\nQuestion: " + instructions + "\nCandidates:\n"
+                    f"Task: {kind}\nQuestion {question_index + 1}\nCandidates:\n"
+                    if current_template().instructions_first
+                    else "Task: "
+                    + kind
+                    + "\nQuestion: "
+                    + instructions
+                    + "\nCandidates:\n"
                 )
                 positions = []
                 for key, description in group:

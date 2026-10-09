@@ -15,6 +15,7 @@ from safetensors.torch import load_file
 from transformers import AutoProcessor
 from vllm import PoolingParams
 
+from .decision_template import current_template
 from .media import MAX_IMAGES_PER_REQUEST, load_image, validate_text
 
 
@@ -167,6 +168,11 @@ class VjevService:
             ids = base + self.tokenizer.encode(
                 f"\n\nQuestion: {instructions}", add_special_tokens=False
             )
+            if current_template().instructions_first:
+                prefix = self.tokenizer.encode(
+                    f"Question: {instructions}\n\n", add_special_tokens=False
+                )
+                ids = prefix + (ids if kind == "noul" else base)
             slots = []
             if kind == "noul":
                 slots.append(len(ids) - 1)

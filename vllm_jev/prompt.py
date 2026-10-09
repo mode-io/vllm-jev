@@ -94,7 +94,23 @@ def branch_token_ids(
         suffix_ids = tokenizer.encode(suffix, add_special_tokens=False)
         if len(suffix_ids) > 192:
             raise ValueError("candidate branch exceeds OpenJev-0.6B's 192-token limit")
-        prompts.append(prefix_ids + suffix_ids)
+        if current_template().instructions_first:
+            first = tokenizer.encode(
+                header + "Question:\n" + question + "\n\nState:\n" + state_text,
+                add_special_tokens=False,
+            )
+            rest = tokenizer.encode(
+                "\n\nCandidate answer:\n"
+                + option
+                + "\n\nIs this candidate correct? Answer Yes or No."
+                + tail,
+                add_special_tokens=False,
+            )
+            if len(first) + len(rest) > 960:
+                raise ValueError("instructions-first branch exceeds 960 tokens")
+            prompts.append(first + rest)
+        else:
+            prompts.append(prefix_ids + suffix_ids)
     return prompts
 
 
@@ -132,7 +148,25 @@ def tiny_token_ids(
         state_ids = (
             state_ids[:head] + state_ids[-(budget - head) :] if budget > 0 else []
         )
-    ids, positions = pre + state_ids + mid, []
+    if current_template().instructions_first:
+        question_ids = ids_of("<question>\n" + question + "\n</question>\n")
+        ending = ids_of("\n</state>\n<options>\n")
+        budget = 4096 - (
+            len(question_ids) + len(pre) + len(ending) + sum(map(len, opts)) + len(post)
+        )
+        if budget < 0:
+            raise ValueError("Tiny-Jev schema exceeds 4096 tokens")
+        state_ids = ids_of(state_text)
+        if len(state_ids) > budget:
+            head = int(budget * 0.7)
+            tail_count = budget - head
+            state_ids = state_ids[:head] + (
+                state_ids[-tail_count:] if tail_count else []
+            )
+        ids = question_ids + pre + state_ids + ending
+    else:
+        ids = pre + state_ids + mid
+    positions = []
     for option_ids in opts:
         positions.append(len(ids) + len(option_ids) - 3)
         ids += option_ids

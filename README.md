@@ -166,6 +166,12 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-10-10
+
+- Extended `instructions-first` to the supported decision-model families while keeping their model-specific answer formats. Laya already uses this order; native prompts remain the default. See the [layout table](docs/guide.md#decision-templates).
+- Kept Clef's readout schema after the evidence when adding an instruction preamble, avoiding the answer regression caused by moving the entire schema forward. Image and video inputs retain their native structure.
+- Verified 136 regression checks and 10,500 synthetic requests across 21 Linux checkpoints at concurrency 16, including 500 image requests, plus 80 video and 40 long-context requests. Client-disconnect recovery passed; probabilities and near-tied Score levels can still vary with batching.
+
 ### 2026-10-09
 
 - Added `--decision-template native|instructions-first|path.json`. Native prompts remain the default; [configuration examples](docs/guide.md#decision-templates) show how to select a preset or load a JSON file.
