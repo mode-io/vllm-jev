@@ -230,3 +230,114 @@ def test_requests_overlap_and_cancellation_is_scoped(endpoint):
                 await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(asyncio.wait_for(run(), timeout=5))
+
+
+@pytest.fixture
+def configured_template(monkeypatch):
+    from vllm_jev.decision_template import ENVIRONMENT, current_template
+
+    def set_config(config):
+        import json
+
+        monkeypatch.setenv(ENVIRONMENT, json.dumps(config))
+        current_template.cache_clear()
+
+    yield set_config
+    current_template.cache_clear()
+
+
+def test_template_applies_once_to_all_typed_questions(endpoint, configured_template):
+    configured_template(
+        {
+            "layout": "instructions-first",
+            "instruction_template": "POLICY\n{instructions}",
+        }
+    )
+    engine = RecordingEngine()
+    service = endpoint._JevService(engine, Tokenizer())
+    client = TestClient(app_for(endpoint, service))
+    response = client.post("/v1/systemone", json=payload())
+    assert response.status_code == 200, response.text
+    assert len(engine.calls) == 5
+    for prompt, _, _ in engine.calls:
+        text = prompt["prompt"]
+        assert text.startswith("Question: POLICY\n")
+        assert text.count("POLICY") == 1
+        assert text.index("Question:") < text.index("Context:")
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "vllm_clef_service",
+        "vllm_rsijev_service",
+        "vllm_laya_service",
+        "vllm_decision_service",
+        "vllm_valen_service",
+        "vllm_vjev_service",
+    ],
+)
+def test_shared_instruction_template_preserves_media_and_schema(
+    endpoint, configured_template, backend
+):
+    configured_template({"instruction_template": "PREFIX {instructions} SUFFIX"})
+    seen = []
+
+    class Service:
+        async def systemone(self, request):
+            seen.append(request)
+            return {"ok": True}
+
+    client = TestClient(app_for(endpoint, Service(), backend))
+    body = payload(
+        state={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,abc"},
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    response = client.post("/v1/systemone", json=body)
+    assert response.status_code == 200, response.text
+    assert seen[0].state == body["state"]
+    for key, q in body["questions"].items():
+        assert (
+            seen[0].questions[key]["instructions"]
+            == "PREFIX " + q["instructions"] + " SUFFIX"
+        )
+        assert seen[0].questions[key].get("criteria") == q.get("criteria")
+    assert body["questions"]["urgent"]["instructions"] == "Is it urgent?"
+
+
+def test_layout_rejected_for_marker_backend(endpoint, configured_template):
+    configured_template({"layout": "instructions-first"})
+    engine = RecordingEngine()
+    service = endpoint._JevService(engine, Tokenizer(), protocol="openjev_branch_v03")
+    response = TestClient(app_for(endpoint, service)).post(
+        "/v1/systemone", json=payload()
+    )
+    assert response.status_code == 422
+    assert not engine.calls
+
+
+def test_invalid_batch_template_input_starts_no_engine_work(
+    endpoint, configured_template
+):
+    configured_template({"state_template": "Evidence: {state}"})
+    engine = RecordingEngine(blocked=True)
+    service = endpoint._JevService(engine, Tokenizer())
+    client = TestClient(app_for(endpoint, service))
+    request = {"state": "plain evidence", "question": "Which?", "options": ["A", "B"]}
+    response = client.post(
+        "/plugins/vllm-jev/batch",
+        json={"requests": [request, {**request, "state": {"messages": []}}]},
+    )
+    assert response.status_code == 422
+    assert engine.calls == []

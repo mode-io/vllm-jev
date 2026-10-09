@@ -4,6 +4,8 @@ import json
 import math
 from collections.abc import Sequence
 
+from .decision_template import current_template
+
 
 def render_value(value):
     return (
@@ -28,11 +30,15 @@ def _validate_choice(state, question, options: Sequence[str]) -> None:
 
 def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
     _validate_choice(state, question, options)
-    prefix = f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
+    template = current_template()
+    state_text, question_text = render_value(state), render_value(question)
+    options_text = (
+        render_value(list(options))
+        if "options" in template.fields.get("choice_prompt", set())
+        else ""
+    )
     return [
-        prefix
-        + f"Proposed answer: {render_value(option)}\n"
-        + "Is this proposed answer correct? Answer Yes or No."
+        template.choice(state_text, question_text, render_value(option), options_text)
         for option in options
     ]
 
@@ -163,3 +169,7 @@ def choice_result(
         "selected_probability": selected_probability,
         "confidence": (selected_probability - uniform) / (1.0 - uniform),
     }
+
+
+def noul_prompt(state, question: str) -> str:
+    return current_template().noul(render_value(state), render_value(question))
