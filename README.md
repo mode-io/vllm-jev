@@ -166,6 +166,10 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## Updates
 
+### 2026-10-09
+
+- Added optional [decision templates](docs/guide.md#decision-templates): state/instruction formatting for all model adapters, plus instruction-first and custom decision text for Open-Jev-2B/9B. The original prompts remain the default. Addresses the template request in [#7](https://github.com/mode-io/vllm-jev/issues/7).
+
 ### 2026-10-08
 
 - Moved RSI-Jev v3.0/v4.0-VL and Clef/Clef-Flash into the main Supported Models table for Linux.

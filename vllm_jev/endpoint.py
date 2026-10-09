@@ -17,10 +17,12 @@ from vllm import PoolingParams
 from vllm.entrypoints.serve.utils.api_utils import load_aware_call, with_cancellation
 
 from . import QWEN3_PROJECTED_ARCHITECTURE
+from .decision_template import current_template
 from .prompt import (
     branch_token_ids,
     candidate_prompts,
     choice_result,
+    noul_prompt,
     render_value,
     tiny_token_ids,
 )
@@ -287,10 +289,7 @@ class _JevService:
     async def noul(
         self, state: Any, question: str, salt: str
     ) -> tuple[float, int, int]:
-        raw = (
-            f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
-            "Is the answer to this question yes? Answer Yes or No."
-        )
+        raw = noul_prompt(state, question)
         prompt = self.tokenizer.apply_chat_template(
             [{"role": "user", "content": raw}],
             tokenize=False,
@@ -513,6 +512,19 @@ class JevEndpointPlugin:
     required_tasks = ("classify", "token_embed")
 
     def attach_router(self, app: FastAPI) -> None:
+        template = current_template()
+
+        def prepare_choice(payload, service):
+            template.validate_protocol(getattr(service, "protocol", ""))
+            if not {"instruction_template", "state_template"} & template.config.keys():
+                return payload
+            return payload.model_copy(
+                update={
+                    "state": template.state(payload.state),
+                    "question": template.instructions(payload.question),
+                }
+            )
+
         @app.post("/plugins/vllm-jev/choice")
         @with_cancellation
         @load_aware_call
@@ -521,7 +533,7 @@ class JevEndpointPlugin:
             if service is None:
                 raise HTTPException(status_code=503, detail="Jev engine unavailable")
             try:
-                return await service.choice(payload)
+                return await service.choice(prepare_choice(payload, service))
             except ValueError as error:
                 raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -539,8 +551,9 @@ class JevEndpointPlugin:
                 )
             started = time.perf_counter()
             try:
+                prepared = [prepare_choice(item, service) for item in payload.requests]
                 results = await _gather_cancel_on_error(
-                    service.choice(item) for item in payload.requests
+                    service.choice(item) for item in prepared
                 )
             except ValueError as error:
                 raise HTTPException(status_code=422, detail=str(error)) from error
@@ -555,6 +568,27 @@ class JevEndpointPlugin:
         @with_cancellation
         @load_aware_call
         async def system_one(payload: SystemOneRequest, raw_request: Request):
+            try:
+                service = getattr(raw_request.app.state, "vllm_jev_service", None)
+                template.validate_protocol(getattr(service, "protocol", ""))
+                if {"instruction_template", "state_template"} & template.config.keys():
+                    questions = {
+                        key: {
+                            **spec,
+                            "instructions": template.instructions(spec["instructions"]),
+                        }
+                        if "instructions" in spec
+                        else spec
+                        for key, spec in payload.questions.items()
+                    }
+                    payload = payload.model_copy(
+                        update={
+                            "state": template.state(payload.state),
+                            "questions": questions,
+                        }
+                    )
+            except ValueError as error:
+                raise HTTPException(status_code=422, detail=str(error)) from error
             if payload.cache_salt is not None:
                 service = getattr(raw_request.app.state, "vllm_jev_service", None)
                 if not getattr(service, "supports_shared_prefix_cache", False):

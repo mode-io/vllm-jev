@@ -34,6 +34,10 @@ def main() -> None:
     )
     serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
+        "--decision-template",
+        help="native, instructions-first, or a decision-template JSON file.",
+    )
+    serve.add_argument(
         "--workspace",
         type=Path,
         default=Path(os.environ.get("VLLM_JEV_HOME", ".local")),
@@ -69,6 +73,16 @@ def main() -> None:
             "--help" if value.startswith("--help=") else value for value in arguments
         ]
     args, extra = parser.parse_known_args(arguments)
+    from .decision_template import ENVIRONMENT, current_template, load_template
+
+    try:
+        template = (
+            load_template(args.decision_template)
+            if args.decision_template is not None
+            else current_template()
+        )
+    except (ValueError, OSError) as error:
+        parser.error(str(error))
     if sys.platform == "darwin":
         if extra:
             parser.error(f"unrecognized arguments: {' '.join(extra)}")
@@ -163,7 +177,11 @@ def main() -> None:
     # Export can use CUDA; the child must exit before vLLM allocates GPU memory.
     if prepare is not None:
         try:
-            subprocess.run([sys.executable, *prepare], env=environment, check=True)
+            prepare_environment = environment.copy()
+            prepare_environment.pop(ENVIRONMENT, None)
+            subprocess.run(
+                [sys.executable, *prepare], env=prepare_environment, check=True
+            )
         except subprocess.CalledProcessError as error:
             raise SystemExit(error.returncode) from None
     valen_manifest = checkpoint / "valen_manifest.json"
@@ -199,7 +217,23 @@ def main() -> None:
         manifest = json.loads(manifest_path.read_text())
         if manifest.get("prompt_protocol", "open_jev_choice") != args.protocol:
             parser.error("requested protocol differs from the prepared checkpoint")
+    if template.requires_open_jev:
+        path = checkpoint / "jev_manifest.json"
+        protocol = (
+            json.loads(path.read_text()).get("prompt_protocol", "open_jev_choice")
+            if path.is_file()
+            else ""
+        )
+        try:
+            template.validate_protocol(protocol)
+        except ValueError as error:
+            parser.error(str(error))
+    environment[ENVIRONMENT] = json.dumps(
+        template.config, ensure_ascii=False, separators=(",", ":")
+    )
     if sys.platform == "darwin":
+        os.environ[ENVIRONMENT] = environment[ENVIRONMENT]
+        current_template.cache_clear()
         from .mac import serve as serve_mac
 
         serve_mac(checkpoint, model_id, host=args.host, port=args.port)

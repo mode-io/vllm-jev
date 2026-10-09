@@ -21,7 +21,7 @@ from .prompt import (
     branch_token_ids,
     candidate_prompts,
     choice_result,
-    render_value,
+    noul_prompt,
     tiny_token_ids,
 )
 
@@ -314,10 +314,7 @@ class MacJevService(_MacService):
         return await self._run(self._choice, payload, kind)
 
     def _noul(self, state, question: str, cancelled: Event):
-        raw = (
-            f"Context:\n{render_value(state)}\n\nQuestion: {render_value(question)}\n"
-            "Is the answer to this question yes? Answer Yes or No."
-        )
+        raw = noul_prompt(state, question)
         prompt = self.tokenizer.apply_chat_template(
             [{"role": "user", "content": raw}],
             tokenize=False,

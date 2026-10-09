@@ -169,6 +169,56 @@ VLLM_JEV_MAC_IMAGE_CACHE=1 vllm-jev serve Valen-Team/Valen-Preview-0923
 
 This opt-in cache retains up to two identical decoded images and their visual features in process memory until eviction or shutdown. It helps repeated single-image requests; new images use the normal path. Multi-image requests and large entries bypass the cache.
 
+### Decision templates
+
+`--decision-template` controls decision text before the model's chat formatting. Omitting it, or using `native`, preserves the original prompts.
+
+For Open-Jev-2B/9B, put the question instructions before the state while keeping the candidate answer beside the final scoring cue:
+
+```bash
+vllm-jev serve ZefanCai/Open-Jev-2B --decision-template instructions-first
+```
+
+Repeated instructions can then share eligible prefix blocks. Cross-request reuse also needs the same trusted [`cache_salt`](#shared-prefixes-across-system-one-requests). This preset moves instructions, not the entire candidate list; it does not enable suffix caching.
+
+All supported model adapters can apply a shared instruction template. Save a JSON file, for example `routing.json`:
+
+```json
+{
+  "instruction_template": "Use the supplied evidence and our routing policy.\n{instructions}"
+}
+```
+
+```bash
+vllm-jev serve Cloudflare/clef-flash --decision-template routing.json
+```
+
+This wraps each explicitly supplied, nonempty text instruction on `/v1/systemone`, and the question text on the Choice/batch endpoints where available. It preserves state/media, candidate labels and descriptions, and the model's special markers and readout rules. Missing instructions retain the adapter's existing behavior.
+
+An optional `state_template`, such as `"Business policy...\n{state}"`, can wrap text or a JSON object/list. JSON is rendered deterministically. A non-identity wrapper rejects `state.messages` so chat roles and embedded media are not flattened; use instruction formatting for those requests. Top-level Clef media fields are left intact.
+
+For Open-Jev-2B/9B, a JSON file may also customize the complete decision text:
+
+| JSON field | Required placeholders | Applies to |
+|---|---|---|
+| `layout` | `native` or `instructions-first` | Default text layout |
+| `state_template` | `{state}` | Text or JSON objects/lists on all model adapters |
+| `instruction_template` | `{instructions}` | All model adapters |
+| `choice_prompt` | `{state}`, `{instructions}`, `{candidate}` | Open-Jev-2B/9B Choice and Score |
+| `noul_prompt` | `{state}`, `{instructions}` | Open-Jev-2B/9B Noul |
+
+A Choice/Score template may also use optional `{options}`, a JSON array of all rendered candidate descriptions. This lets fixed instructions and the full candidate list precede the state while retaining the selected candidate and scoring cue at the end:
+
+```json
+{
+  "choice_prompt": "Question: {instructions}\nAllowed candidates: {options}\nContext:\n{state}\n\nProposed answer: {candidate}\nIs this proposed answer correct? Answer Yes or No."
+}
+```
+
+Placeholders insert literal text; use `{{` and `}}` for literal braces. Files contain JSON, not executable code or Jinja. The configuration is loaded at startup; restart to change it. Other model families support state/instruction formatting but reject these Open-Jev-specific layouts rather than changing their marker protocol.
+
+Custom prompts can change accuracy, probabilities, and calibration. Validate the chosen template on your own labelled examples; choosing a template does not retrain the model.
+
 ### Online prefix cache (experimental)
 
 For repeated Open-Jev-2B text requests on Linux, an optional prefix tree learns shared token paths and retains complete Attention and GDN states at selected positions. It is **disabled by default** and has been tested with Open-Jev-2B on an A800 using vLLM 0.29.0.
@@ -373,6 +423,10 @@ In A800 Kev-0.8B stress tests, all three 1,200-request runs completed without un
 RTX 5090 trials reported up to about 5% throughput loss across the tested models. The A800 runs did not establish a speed benefit. Compare latency and throughput on your workload before enabling the mode.
 
 ## Updates
+
+### 2026-10-09
+
+- Added deployment-configured [decision templates](#decision-templates), with unchanged native defaults and model-specific layout checks.
 
 ### 2026-10-08
 
