@@ -156,7 +156,14 @@ def render(state: str, instructions: str, options, criteria, answer_cue="Answer:
         if state.strip()
         else f"{instructions}\nOptions:\n"
     )
-    if current_template().instructions_first and state.strip():
+    if current_template().context_order is not None:
+        head = (
+            current_template().context(
+                state, instructions, json.dumps(blocks, ensure_ascii=False)
+            )
+            + "Options:\n"
+        )
+    elif current_template().instructions_first and state.strip():
         head = f"{instructions}\n\n{state}\nOptions:\n"
     return head, blocks, f"\n\n{answer_cue}"
 
@@ -182,6 +189,8 @@ def encode_question(tokenizer, state, instructions, options, criteria, max_lengt
     ids += tokens(tail)
     overflow = len(ids) - max_length
     if overflow > 0:
+        if current_template().context_order is not None:
+            raise ValueError("ordered RSI-Jev prompt exceeds model context")
         if current_template().instructions_first:
             raise ValueError("instructions-first RSI-Jev prompt exceeds model context")
         if overflow >= len(head_ids):
@@ -248,7 +257,8 @@ def encode_questions(tokenizer, state, questions, max_length):
         return encode_question(tokenizer, state, q[2], q[3], q[4], max_length)
 
     if (
-        current_template().instructions_first
+        current_template().context_order is not None
+        or current_template().instructions_first
         or not state.strip()
         or not _can_split_state(tokenizer)
     ):

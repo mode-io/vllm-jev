@@ -26,6 +26,7 @@ from transformers import AutoTokenizer
 from vllm import PoolingParams
 
 from .endpoint import SystemOneRequest, _gather_cancel_on_error
+from .laya_template import ContextOrderMixin
 
 
 class _TokenStates(torch.nn.Module):
@@ -39,7 +40,7 @@ class _TokenStates(torch.nn.Module):
         return SimpleNamespace(last_hidden_state=input_ids)
 
 
-class _LayaProtocol(Agent):
+class _LayaProtocol(ContextOrderMixin, Agent):
     """Reuse Laya's exact prompt and probability rules without loading its encoder."""
 
     def __init__(self, config: dict, tokenizer):

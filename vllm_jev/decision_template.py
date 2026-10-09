@@ -18,10 +18,30 @@ FIELDS = {
 
 class DecisionTemplate:
     def __init__(self, config: dict):
-        if not isinstance(config, dict) or set(config) - {"layout", *FIELDS}:
+        if not isinstance(config, dict) or set(config) - {
+            "layout",
+            "context_order",
+            *FIELDS,
+        }:
             raise ValueError("unknown decision-template fields")
         self.config = dict(config)
         self.fields = {}
+        order = config.get("context_order")
+        if "context_order" in config:
+            if (
+                not isinstance(order, list)
+                or len(order) != 3
+                or any(not isinstance(field, str) for field in order)
+                or set(order) != {"state", "instructions", "criteria"}
+            ):
+                raise ValueError(
+                    "context_order must list state, instructions and criteria exactly once"
+                )
+            if {"layout", "choice_prompt", "noul_prompt"} & config.keys():
+                raise ValueError(
+                    "context_order cannot be combined with layout or full prompt overrides"
+                )
+        self.context_order = tuple(order) if order is not None else None
         self.layout = config.get("layout", "native")
         if self.layout not in ("native", "instructions-first"):
             raise ValueError(
@@ -60,6 +80,20 @@ class DecisionTemplate:
     def instructions_first(self) -> bool:
         return self.layout == "instructions-first"
 
+    def arrange(self, blocks):
+        """Order logical blocks without flattening token or media-message objects."""
+        if self.context_order is None:
+            raise ValueError("context_order is not configured")
+        return [item for field in self.context_order for item in blocks[field]]
+
+    def context(self, state: str, instructions: str, criteria: str) -> str:
+        blocks = {
+            "state": ["Context:\n" + state + "\n\n"],
+            "instructions": ["Question: " + instructions + "\n\n"],
+            "criteria": ["Criteria:\n" + criteria + "\n\n"],
+        }
+        return "".join(self.arrange(blocks))
+
     def validate_protocol(self, protocol: str) -> None:
         if self.requires_open_jev and protocol != "open_jev_choice":
             raise ValueError(
@@ -96,6 +130,11 @@ class DecisionTemplate:
         self, state: str, instructions: str, candidate: str, options: str = ""
     ) -> str:
         template = self.config.get("choice_prompt")
+        if template is None and self.context_order is not None:
+            return self.context(state, instructions, options) + (
+                "Proposed answer: " + candidate + "\n"
+                "Is this proposed answer correct? Answer Yes or No."
+            )
         if template is None:
             prefix = (
                 "Question: {instructions}\nContext:\n{state}\n\n"
@@ -117,6 +156,10 @@ class DecisionTemplate:
 
     def noul(self, state: str, instructions: str) -> str:
         template = self.config.get("noul_prompt")
+        if template is None and self.context_order is not None:
+            return self.context(state, instructions, '["false", "true"]') + (
+                "Is the answer to this question yes? Answer Yes or No."
+            )
         if template is None:
             prefix = (
                 "Question: {instructions}\nContext:\n{state}\n\n"

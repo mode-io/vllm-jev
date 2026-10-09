@@ -321,6 +321,18 @@ class DecisionCompiler:
                 return encode(re.sub(r"<\|([A-Za-z0-9_]+)\|>", r"<¦\1¦>", text))
 
             instruction_ids = [self.special[1]] + user(instructions)
+            if current_template().context_order is not None:
+                base = current_template().arrange(
+                    {
+                        "state": list(base) + user("\n\n"),
+                        "instructions": user("Question: " + instructions + "\n\n"),
+                        "criteria": user(
+                            "Criteria: "
+                            + json.dumps(options, ensure_ascii=False)
+                            + "\n\n"
+                        ),
+                    }
+                )
             ids = (
                 instruction_ids + list(base)
                 if current_template().instructions_first
@@ -334,6 +346,18 @@ class DecisionCompiler:
             positions.append(len(ids) - 1)
         else:
             ids = list(base)
+            if current_template().context_order is not None:
+                ids = current_template().arrange(
+                    {
+                        "state": ids + encode("\n\n"),
+                        "instructions": encode("Question: " + instructions + "\n\n"),
+                        "criteria": encode(
+                            "Criteria: "
+                            + json.dumps(options, ensure_ascii=False)
+                            + "\n\n"
+                        ),
+                    }
+                )
             if current_template().instructions_first:
                 ids = encode("Question: " + instructions + "\n\n") + ids
                 piece = "\nOptions:"

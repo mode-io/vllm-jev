@@ -27,7 +27,13 @@ def task_prompt(tokenizer, state, instructions, keys, descriptions):
             for i, (key, description) in enumerate(zip(keys, descriptions))
         ],
     }
-    if current_template().instructions_first:
+    configured = current_template()
+    if configured.context_order is not None:
+        fields = {"state": "state", "instructions": "question", "criteria": "options"}
+        decision = {
+            fields[field]: decision[fields[field]] for field in configured.context_order
+        }
+    elif configured.instructions_first:
         decision = {
             "question": decision["question"],
             "options": decision["options"],
@@ -62,7 +68,17 @@ def jevk5_prompt(tokenizer, state, instructions, descriptions):
             for i, value in enumerate(descriptions)
         ],
     }
-    if current_template().instructions_first:
+    configured = current_template()
+    if configured.context_order is not None:
+        fields = {
+            "state": "evidence",
+            "instructions": "criterion",
+            "criteria": "options",
+        }
+        payload = {
+            fields[field]: payload[fields[field]] for field in configured.context_order
+        }
+    elif configured.instructions_first:
         payload = {
             "criterion": payload["criterion"],
             "options": payload["options"],
@@ -95,7 +111,26 @@ def packed_slots(tokenizer, state, questions, labels, token_ids, max_state_token
     ids = encode("Context:\n" + state)[: max_state_tokens + 3]
     slots = []
     multi = len(questions) > 1
-    if current_template().instructions_first:
+    configured = current_template()
+    if configured.context_order is not None:
+        instruction_text = "\n".join(
+            f"Question {i + 1}: {ins}" for i, (ins, _) in enumerate(questions)
+        )
+        criteria_text = json.dumps(
+            [
+                {"question": i + 1, "options": opts}
+                for i, (_, opts) in enumerate(questions)
+            ],
+            ensure_ascii=False,
+        )
+        ids = configured.arrange(
+            {
+                "state": ids + encode("\n\n"),
+                "instructions": encode(instruction_text + "\n\n"),
+                "criteria": encode("Criteria:\n" + criteria_text + "\n\n"),
+            }
+        )
+    elif configured.instructions_first:
         prefix = "".join(
             f"Question{' ' + str(i + 1) if multi else ''}: {ins}\n"
             for i, (ins, _) in enumerate(questions)
@@ -105,7 +140,7 @@ def packed_slots(tokenizer, state, questions, labels, token_ids, max_state_token
         number = " " + str(i + 1) if multi else ""
         ids += encode(
             f"\n\nQuestion{number} options:"
-            if current_template().instructions_first
+            if configured.instructions_first
             else f"\n\nQuestion{number}: {instructions}\nOptions:"
         )
         if len(options) <= 10:
@@ -162,7 +197,22 @@ def mica_prompt(tokenizer, state, instructions, keys, descriptions, kind, labels
             + f"\nAnswer with the label of the best {noun}."
         )
     content = f"<state>\n{escape(state)}\n</state>\nQuestion: {escape(instructions)}\n{ending}"
-    if current_template().instructions_first:
+    configured = current_template()
+    if configured.context_order is not None:
+        body, cue = ending.rsplit("\n", 1)
+        content = (
+            "".join(
+                configured.arrange(
+                    {
+                        "state": [f"<state>\n{escape(state)}\n</state>\n"],
+                        "instructions": [f"Question: {escape(instructions)}\n"],
+                        "criteria": [body + "\n"],
+                    }
+                )
+            )
+            + cue
+        )
+    elif configured.instructions_first:
         content = f"Question: {escape(instructions)}\n<state>\n{escape(state)}\n</state>\n{ending}"
     return tokenizer.apply_chat_template(
         [

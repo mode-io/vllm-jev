@@ -173,13 +173,25 @@ This opt-in cache retains up to two identical decoded images and their visual fe
 
 `--decision-template` controls decision text before the model's chat formatting. Omitting it, or using `native`, preserves the original prompts.
 
-Use `instructions-first` to put fixed instructions before changing evidence. Each adapter retains its model-specific answer markers and readout:
+Save the logical block order in a JSON file, for example `routing.json`:
 
-```bash
-vllm-jev serve ZefanCai/Open-Jev-2B --decision-template instructions-first
+```json
+{
+  "context_order": ["instructions", "criteria", "state"]
+}
 ```
 
-Repeated instructions can share eligible prefix blocks on backends that support prefix reuse. Cross-request reuse also needs the same trusted [`cache_salt`](#shared-prefixes-across-system-one-requests). This changes prompt order; it does not enable suffix caching or add caching to backends without it.
+```bash
+vllm-jev serve ZefanCai/Open-Jev-2B --decision-template routing.json
+```
+
+`instructions` contains question rules; `criteria` contains candidate descriptions or score levels; `state` contains the changing evidence, including supported media. List all three names exactly once, in any order. For example, `["criteria", "state", "instructions"]` puts the candidate context first. Each adapter renders these logical blocks in its own text, JSON, token or chat format. Leading system messages and the model's native readout structure are retained. Some adapters repeat question/option text in the protected readout after the ordered context.
+
+You can combine `context_order` with `state_template` and `instruction_template`. It is a separate configuration from `layout`, `choice_prompt` and `noul_prompt`; combining them is rejected at startup. Model context limits still apply, including any repeated readout text.
+
+Matching fixed blocks can share eligible prefix-cache entries on backends supporting reuse. Cross-request reuse also needs the same trusted [`cache_salt`](#shared-prefixes-across-system-one-requests). The order option does not enable suffix caching or add cache support to a backend.
+
+The existing `native` and `instructions-first` presets remain compatible. `instructions-first` preserves its original per-family behavior:
 
 | Model family | `instructions-first` layout |
 |---|---|
@@ -217,7 +229,8 @@ For Open-Jev-2B/9B, a JSON file may also customize the complete decision text:
 
 | JSON field | Required placeholders | Applies to |
 |---|---|---|
-| `layout` | `native` or `instructions-first` | All model families, as listed above |
+| `context_order` | A permutation of `instructions`, `criteria`, `state` | Logical context ordering on all model families |
+| `layout` | `native` or `instructions-first` | Compatibility presets, as listed above |
 | `state_template` | `{state}` | Text or JSON objects/lists on all model adapters |
 | `instruction_template` | `{instructions}` | All model adapters |
 | `choice_prompt` | `{state}`, `{instructions}`, `{candidate}` | Open-Jev-2B/9B Choice and Score |
@@ -233,7 +246,7 @@ A Choice/Score template may also use optional `{options}`, a JSON array of all r
 
 Placeholders insert literal text; use `{{` and `}}` for literal braces. Files contain JSON, not executable code or Jinja. The configuration is loaded at startup; restart to change it. All families support state/instruction formatting and the preset above. Complete `choice_prompt`/`noul_prompt` replacement remains specific to Open-Jev-2B/9B: other families retain their trained marker, option-span and joint-readout structure.
 
-Custom prompts can change accuracy, probabilities, and calibration. Validate the chosen template on your own labelled examples; choosing a template does not retrain the model.
+Changing block order or text formatting can change answers, probabilities and calibration. Validate the chosen configuration on your labelled workload.
 
 ### Online prefix cache (experimental)
 
@@ -442,9 +455,9 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 ### 2026-10-10
 
-- Extended `instructions-first` to the supported decision-model families while keeping their model-specific answer formats. Laya already uses this order; native prompts remain the default. See the [layout table](#decision-templates).
+- Added declarative `context_order` for instructions, criteria and state, supporting all six permutations across the supported decision-model families. Native and `instructions-first` presets remain compatible. See the [configuration guide](#decision-templates).
 - Kept Clef's readout schema after the evidence when adding an instruction preamble, avoiding the answer regression caused by moving the entire schema forward. Image and video inputs retain their native structure.
-- Verified 136 regression checks and 10,500 synthetic requests across 21 Linux checkpoints at concurrency 16, including 500 image requests, plus 80 video and 40 long-context requests. Client-disconnect recovery passed; probabilities and near-tied Score levels can still vary with batching.
+- Verified 184 regression checks and 27,300 synthetic requests across 91 model/order combinations, plus 240 video and 150 long-context requests. An independent 8,000-request retest at concurrency 32 also passed, including image, video and cancellation recovery checks. Changing order can change answers; native remains the default.
 
 ### 2026-10-09
 

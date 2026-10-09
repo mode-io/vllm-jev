@@ -35,7 +35,7 @@ def main() -> None:
     serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
         "--decision-template",
-        help="native, instructions-first, or a decision-template JSON file.",
+        help="Decision-template JSON file, or native/instructions-first compatibility preset.",
     )
     serve.add_argument(
         "--workspace",

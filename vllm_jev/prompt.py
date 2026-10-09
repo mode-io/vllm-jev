@@ -34,7 +34,8 @@ def candidate_prompts(state, question, options: Sequence[str]) -> list[str]:
     state_text, question_text = render_value(state), render_value(question)
     options_text = (
         render_value(list(options))
-        if "options" in template.fields.get("choice_prompt", set())
+        if template.context_order is not None
+        or "options" in template.fields.get("choice_prompt", set())
         else ""
     )
     return [
@@ -94,7 +95,24 @@ def branch_token_ids(
         suffix_ids = tokenizer.encode(suffix, add_special_tokens=False)
         if len(suffix_ids) > 192:
             raise ValueError("candidate branch exceeds OpenJev-0.6B's 192-token limit")
-        if current_template().instructions_first:
+        configured = current_template()
+        if configured.context_order is not None:
+            context = configured.context(
+                state_text, question, render_value(list(options))
+            )
+            ordered = tokenizer.encode(
+                header
+                + context
+                + "Candidate answer:\n"
+                + option
+                + "\n\nIs this candidate correct? Answer Yes or No."
+                + tail,
+                add_special_tokens=False,
+            )
+            if len(ordered) > 960:
+                raise ValueError("ordered branch exceeds 960 tokens")
+            prompts.append(ordered)
+        elif configured.instructions_first:
             first = tokenizer.encode(
                 header + "Question:\n" + question + "\n\nState:\n" + state_text,
                 add_special_tokens=False,
@@ -148,7 +166,15 @@ def tiny_token_ids(
         state_ids = (
             state_ids[:head] + state_ids[-(budget - head) :] if budget > 0 else []
         )
-    if current_template().instructions_first:
+    configured = current_template()
+    if configured.context_order is not None:
+        blocks = {
+            "state": pre + ids_of(state_text) + ids_of("\n</state>\n"),
+            "instructions": ids_of("<question>\n" + question + "\n</question>\n"),
+            "criteria": ids_of("Criteria:\n" + render_value(list(options)) + "\n"),
+        }
+        ids = configured.arrange(blocks) + ids_of("<options>\n")
+    elif configured.instructions_first:
         question_ids = ids_of("<question>\n" + question + "\n</question>\n")
         ending = ids_of("\n</state>\n<options>\n")
         budget = 4096 - (

@@ -12,6 +12,7 @@ from huggingface_hub import snapshot_download
 
 from .endpoint import SystemOneRequest
 from .laya_export import MODELS, SOURCE_FILES, verify_source
+from .laya_template import ContextOrderMixin
 from .mac import _MacService
 
 
@@ -59,8 +60,11 @@ class MacLayaService(_MacService):
         super().__init__(executor)
         from laya import Agent
 
+        class TemplateAgent(ContextOrderMixin, Agent):
+            pass
+
         _verify_source(checkpoint, model_id)
-        self.agent = Agent(str(checkpoint), device="mps", fast=False)
+        self.agent = TemplateAgent(str(checkpoint), device="mps", fast=False)
         if self.agent.device.type != "mps":
             raise RuntimeError("Laya requires an available Apple Metal device")
         self.model_id = model_id

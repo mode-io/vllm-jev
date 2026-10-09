@@ -168,7 +168,25 @@ class VjevService:
             ids = base + self.tokenizer.encode(
                 f"\n\nQuestion: {instructions}", add_special_tokens=False
             )
-            if current_template().instructions_first:
+            if current_template().context_order is not None:
+                ids = current_template().arrange(
+                    {
+                        "state": base
+                        + self.tokenizer.encode("\n\n", add_special_tokens=False),
+                        "instructions": self.tokenizer.encode(
+                            f"Question: {instructions}\n\n", add_special_tokens=False
+                        ),
+                        "criteria": self.tokenizer.encode(
+                            "Criteria: "
+                            + json.dumps(pairs, ensure_ascii=False)
+                            + "\n\n",
+                            add_special_tokens=False,
+                        ),
+                    }
+                ) + self.tokenizer.encode(
+                    f"Question: {instructions}", add_special_tokens=False
+                )
+            elif current_template().instructions_first:
                 prefix = self.tokenizer.encode(
                     f"Question: {instructions}\n\n", add_special_tokens=False
                 )
