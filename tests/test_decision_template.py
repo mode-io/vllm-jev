@@ -85,7 +85,7 @@ def test_custom_file_is_resolved_once(tmp_path, monkeypatch):
     assert candidate_prompts("state", "rules", ["A", "B"])[0] == "rules\nstate\nA"
 
 
-def test_other_protocols_allow_instruction_wrapping_only():
+def test_other_protocols_allow_layout_but_protect_full_prompts():
     template = DecisionTemplate(
         {"instruction_template": "Shared policy\n{instructions}"}
     )
@@ -98,10 +98,11 @@ def test_other_protocols_allow_instruction_wrapping_only():
         "tiny_jev_marker",
     ]:
         template.validate_protocol(protocol)
+        DecisionTemplate({"layout": "instructions-first"}).validate_protocol(protocol)
         with pytest.raises(ValueError, match="require Open-Jev"):
-            DecisionTemplate({"layout": "instructions-first"}).validate_protocol(
-                protocol
-            )
+            DecisionTemplate(
+                {"choice_prompt": "{state} {instructions} {candidate}"}
+            ).validate_protocol(protocol)
 
 
 def test_size_limit(tmp_path):
@@ -142,12 +143,14 @@ def test_cli_resolves_template_and_does_not_forward_flag(tmp_path, monkeypatch):
     assert ENVIRONMENT not in calls["prepare_env"]
 
 
-def test_cli_rejects_incompatible_layout_before_engine(tmp_path, monkeypatch):
+def test_cli_rejects_incompatible_full_prompt_before_engine(tmp_path, monkeypatch):
     import sys
 
     from vllm_jev import cli
 
     (tmp_path / "jev_manifest.json").write_text('{"prompt_protocol":"tiny_jev_marker"}')
+    config = tmp_path / "prompt.json"
+    config.write_text('{"choice_prompt":"{state} {instructions} {candidate}"}')
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
         sys,
@@ -157,7 +160,7 @@ def test_cli_rejects_incompatible_layout_before_engine(tmp_path, monkeypatch):
             "serve",
             str(tmp_path),
             "--decision-template",
-            "instructions-first",
+            str(config),
         ],
     )
     monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: None)

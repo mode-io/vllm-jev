@@ -23,6 +23,7 @@ import torch.nn.functional as F
 from safetensors.torch import load_file
 from torch import nn
 
+from .decision_template import current_template
 from .media import load_image, validate_text
 
 PROTOCOL = "rsijev_xattn_v1"
@@ -155,6 +156,8 @@ def render(state: str, instructions: str, options, criteria, answer_cue="Answer:
         if state.strip()
         else f"{instructions}\nOptions:\n"
     )
+    if current_template().instructions_first and state.strip():
+        head = f"{instructions}\n\n{state}\nOptions:\n"
     return head, blocks, f"\n\n{answer_cue}"
 
 
@@ -179,6 +182,8 @@ def encode_question(tokenizer, state, instructions, options, criteria, max_lengt
     ids += tokens(tail)
     overflow = len(ids) - max_length
     if overflow > 0:
+        if current_template().instructions_first:
+            raise ValueError("instructions-first RSI-Jev prompt exceeds model context")
         if overflow >= len(head_ids):
             raise ValueError("the options alone exceed the RSI-Jev context")
         ids = ids[overflow:]
@@ -242,7 +247,11 @@ def encode_questions(tokenizer, state, questions, max_length):
     def fallback(q):
         return encode_question(tokenizer, state, q[2], q[3], q[4], max_length)
 
-    if not state.strip() or not _can_split_state(tokenizer):
+    if (
+        current_template().instructions_first
+        or not state.strip()
+        or not _can_split_state(tokenizer)
+    ):
         return [fallback(q) for q in questions]
     lead = f"{state}\n\n"
     plans = []

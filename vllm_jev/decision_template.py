@@ -54,15 +54,17 @@ class DecisionTemplate:
 
     @property
     def requires_open_jev(self) -> bool:
-        return self.layout != "native" or any(
-            key in self.config for key in ("choice_prompt", "noul_prompt")
-        )
+        return any(key in self.config for key in ("choice_prompt", "noul_prompt"))
+
+    @property
+    def instructions_first(self) -> bool:
+        return self.layout == "instructions-first"
 
     def validate_protocol(self, protocol: str) -> None:
         if self.requires_open_jev and protocol != "open_jev_choice":
             raise ValueError(
-                "decision prompt layouts require Open-Jev-2B/9B (open_jev_choice); "
-                "use instruction_template with layout=native for other models"
+                "full decision prompts require Open-Jev-2B/9B (open_jev_choice); "
+                "use layout, instruction_template or state_template for other models"
             )
 
     def instructions(self, value):

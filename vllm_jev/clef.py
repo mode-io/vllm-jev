@@ -23,6 +23,7 @@ import torch.nn.functional as functional
 from safetensors import safe_open
 from safetensors.torch import load_file
 
+from .decision_template import current_template
 from .media import MAX_IMAGES_PER_REQUEST, load_image, validate_text
 from .video import load_video
 
@@ -156,6 +157,17 @@ def encode(tokenizer, questions: dict, state, media_ids: list[int], max_length: 
         "\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
         "JOINT SCHEMA DECISIONS:"
     )
+    if current_template().instructions_first:
+        # The head was trained on state-conditioned schema representations.
+        # Keep that schema after the evidence, even with an earlier preamble.
+        instructions = "\n".join(
+            f"FIELD {index + 1}: {render(question.get('instructions') or str(identifier))}"
+            for index, (identifier, question) in enumerate(questions.items())
+        )
+        prefix = tokens(
+            f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n<|im_start|>user\n"
+            f"INSTRUCTIONS:\n{instructions}\n\nSTATE:\n"
+        )
     prefix += media_ids
     fixed = len(prefix) + len(schema) + len(suffix)
     if fixed > max_length:
