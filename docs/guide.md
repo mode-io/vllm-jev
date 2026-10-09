@@ -426,7 +426,11 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 
 ### 2026-10-09
 
-- Added deployment-configured [decision templates](#decision-templates), with unchanged native defaults and model-specific layout checks.
+- Added `--decision-template native|instructions-first|path.json`. Native prompts remain the default; [configuration examples](#decision-templates) show how to select a preset or load a JSON file.
+- Open-Jev-2B/9B can place instructions before the state, or use custom Choice/Score and Noul text. The optional `{options}` placeholder puts the full fixed candidate list before the changing state while retaining the selected candidate and scoring cue at the end. Thanks to [xxyyy's request in #7](https://github.com/mode-io/vllm-jev/issues/7).
+- All model adapters support `state_template` for text/JSON objects or lists and `instruction_template` for explicit text instructions. Chat/media envelopes keep their native structure; unsupported full-layout overrides are rejected.
+- Templates are loaded at startup and apply to System One and the available Choice/batch routes. Cross-request prefix reuse still requires matching tokens and a shared, trusted `cache_salt` on supported backends. Restart to change the template; validate custom prompts on your own labelled data because outputs can change.
+- Verified 128 regression tests and an independent 2,580-request HTTP stress run, including 80 image requests, concurrency up to 32, cache isolation, and cancellation recovery. Score probabilities and near-tied levels can still vary with batching/cache state.
 
 ### 2026-10-08
 
