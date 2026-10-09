@@ -157,7 +157,41 @@ def encode(tokenizer, questions: dict, state, media_ids: list[int], max_length: 
         "\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
         "JOINT SCHEMA DECISIONS:"
     )
-    if current_template().instructions_first:
+    if current_template().context_order is not None:
+        header = tokens(
+            f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n<|im_start|>user\n"
+        )
+        blocks = {
+            "instructions": tokens(
+                "INSTRUCTIONS:\n"
+                + "\n".join(
+                    f"FIELD {i + 1}: {render(q.get('instructions') or str(key))}"
+                    for i, (key, q) in enumerate(questions.items())
+                )
+                + "\n\n"
+            ),
+            "criteria": tokens(
+                "CRITERIA:\n"
+                + render({key: question_options(q) for key, q in questions.items()})
+                + "\n\n"
+            ),
+            "state": tokens("STATE:\n") + media_ids,
+        }
+        fixed = (
+            len(header)
+            + sum(map(len, blocks.values()))
+            + len(schema)
+            + len(suffix)
+            + len(tokens("\n\n"))
+        )
+        if fixed > max_length:
+            raise ValueError("schema and media exceed the Clef context")
+        blocks["state"] += tokens(render(state))[: max_length - fixed] + tokens("\n\n")
+        prefix = header + current_template().arrange(blocks)
+        # Ordered context is complete; the native schema readouts follow it.
+        state = ""
+        media_ids = []
+    elif current_template().instructions_first:
         # The head was trained on state-conditioned schema representations.
         # Keep that schema after the evidence, even with an earlier preamble.
         instructions = "\n".join(
@@ -174,7 +208,9 @@ def encode(tokenizer, questions: dict, state, media_ids: list[int], max_length: 
         raise ValueError(
             f"schema and media require {fixed} tokens; the maximum is {max_length}"
         )
-    state_ids = tokens(render(state))[: max_length - fixed]
+    state_ids = (
+        [] if current_template().context_order is not None else tokens(render(state))
+    )[: max_length - fixed]
     offset = len(prefix) + len(state_ids)
     shifted = tuple(
         EncodedQuestion(

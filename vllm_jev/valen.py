@@ -115,7 +115,7 @@ class ValenService:
             (model_path / "valen_manifest.json").read_text()
         ).get("media_kwargs", {})
 
-    def _state(self, state, instruction_prefix=None):
+    def _state(self, state, instruction_prefix=None, context_fields=None):
         media = ValenMedia()
         if isinstance(state, str):
             validate_text(state)
@@ -179,6 +179,21 @@ class ValenService:
                 messages.append({"role": message["role"], "content": rendered})
         else:
             raise ValueError("Valen state must be text or a messages object")
+        if context_fields is not None:
+            index = 0
+            while index < len(messages) and messages[index]["role"] == "system":
+                index += 1
+            leading, state_messages = messages[:index], messages[index:]
+            blocks = {"state": state_messages}
+            blocks.update(
+                {
+                    key: [
+                        {"role": "user", "content": [{"type": "text", "text": value}]}
+                    ]
+                    for key, value in context_fields.items()
+                }
+            )
+            messages = leading + current_template().arrange(blocks)
         if instruction_prefix is not None:
             index = 0
             while index < len(messages) and messages[index]["role"] == "system":
@@ -251,7 +266,28 @@ class ValenService:
             prepared.append((identifier, kind, instructions, pairs))
         if candidate_count > 256:
             raise ValueError("System One exceeds 256 candidates")
-        if current_template().instructions_first:
+        if current_template().context_order is not None:
+            fields = {
+                "instructions": "\n".join(
+                    f"Task {i + 1}: {kind}\nQuestion {i + 1}: {ins}"
+                    for i, (_, kind, ins, _) in enumerate(prepared)
+                ),
+                "criteria": "Criteria:\n"
+                + json.dumps(
+                    [
+                        {
+                            "question": i + 1,
+                            "type": kind,
+                            "criteria": payload.questions[key].get("criteria"),
+                        }
+                        for i, (key, kind, _, _) in enumerate(prepared)
+                    ],
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ),
+            }
+            base_ids, media = self._state(payload.state, context_fields=fields)
+        elif current_template().instructions_first:
             prefix = "\n".join(
                 f"Task {i + 1}: {kind}\nQuestion {i + 1}: {instructions}"
                 for i, (_, kind, instructions, _) in enumerate(prepared)
