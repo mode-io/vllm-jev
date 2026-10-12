@@ -168,9 +168,9 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ### 2026-10-10
 
-- Added declarative `context_order` for instructions, criteria and state, supporting all six permutations across the supported decision-model families. Native and `instructions-first` presets remain compatible. See the [configuration guide](docs/guide.md#decision-templates).
-- Kept Clef's readout schema after the evidence when adding an instruction preamble, avoiding the answer regression caused by moving the entire schema forward. Image and video inputs retain their native structure.
-- Verified 184 regression checks and 27,300 synthetic requests across 91 model/order combinations, plus 240 video and 150 long-context requests. An independent 8,000-request retest at concurrency 32 also passed, including image, video and cancellation recovery checks. Changing order can change answers; native remains the default.
+- Added `context_order` with all six instructions/criteria/state permutations across supported models. Existing presets remain compatible; see the [configuration guide](docs/guide.md#decision-templates).
+- Preserved Clef's readout placement and native image/video structure.
+- Passed 184 regression checks, 27,300 synthetic requests and an independent 8,000-request retest, including media and cancellation checks. Native order remains the default.
 
 ### 2026-10-09
 
