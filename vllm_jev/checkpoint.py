@@ -63,6 +63,10 @@ def verify_files(
 
 def verify(path: Path, *, full: bool = True) -> dict:
     path = path.resolve()
+    if (path / "jevany_pointer_manifest.json").is_file():
+        from .jevany_export import verify_jevany_pointer
+
+        return verify_jevany_pointer(path, full=full)
     if (path / "decision_manifest.json").is_file():
         from .decision_export import verify_decision
 

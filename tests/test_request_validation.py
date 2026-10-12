@@ -54,6 +54,7 @@ def payload(**fields):
         "vllm_laya_service",
         "vllm_vjev_service",
         "vllm_valen_service",
+        "vllm_jevany_pointer_service",
         "vllm_jev_service",
     ],
 )
@@ -88,6 +89,27 @@ def test_clef_receives_top_level_media(endpoint):
     assert response.status_code == 200
     assert service.calls[0].images == ["image payload"]
     assert service.calls[0].videos == ["video payload"]
+
+
+def test_jevany_receives_its_media_wire_format(endpoint):
+    service = RecordingService()
+    client = client_for(endpoint, "vllm_jevany_pointer_service", service)
+    media = [{"type": "image", "uri": "data:image/png;base64,AA=="}]
+    response = client.post("/v1/systemone", json=payload(media=media))
+    assert response.status_code == 200
+    assert service.calls[0].media == media
+
+
+def test_other_backends_reject_jevany_media(endpoint):
+    service = RecordingService()
+    client = client_for(endpoint, "vllm_rsijev_service", service)
+    response = client.post(
+        "/v1/systemone",
+        json=payload(media=[{"type": "image", "uri": "unused"}]),
+    )
+    assert response.status_code == 422
+    assert "supported only by JevAny" in response.json()["detail"]
+    assert not service.calls
 
 
 @pytest.mark.parametrize("kind", [[], {}, None, True, 1])

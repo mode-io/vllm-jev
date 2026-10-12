@@ -57,6 +57,8 @@ Input support depends on the model:
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
@@ -84,6 +86,37 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 Linux uses native vLLM pooling; Mac uses MLX. These adapters use only `/v1/systemone`. JevK5 accepts 2–16 options per question; larger option sets and JevK5-Lite are not supported yet. This-That keeps the first 1,536 state tokens before adding the questions.
 
 <a id="rsi-jev-experimental"></a>
+
+### JevAny Pointer
+
+[JevAny](https://github.com/SimpleJev/JevAny) Pointer models run on Linux and answer Choice, Noul and Score through `/v1/systemone`. The adapter was contributed by [heshien / AsirAsir02 in PR #9](https://github.com/mode-io/vllm-jev/pull/9).
+
+```bash
+vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA
+# Or: SimpleJev/JevAny-Qwen3.8-27B-LoRA
+```
+
+First use downloads the pinned adapter and base, merges LoRA, and prepares a reusable checkpoint. An exported checkpoint directory can also be served directly. The optional protocol name is `jevany_pointer_v1`.
+
+- One question per request; 1–255 Choice options or 2–255 Score levels.
+- Up to two PNG/JPEG images, 8 MiB each, in top-level `media`. Video and Mac serving are not supported.
+- State and the complete prompt must each fit the checkpoint's 8,192-token limits. Overlong requests are rejected rather than truncated.
+- Prefix caching is disabled because the Pointer head reads multiple token states from the complete sequence.
+- `context_order`, `instructions-first`, and state/instruction wrappers are supported. Custom context ordering keeps the image prefix and trailing Pointer readouts intact, repeating the instruction/options where needed; changing the order can change answers.
+
+```json
+{
+  "state": "Describe the visible object.",
+  "media": [{"type": "image", "uri": "data:image/png;base64,..."}],
+  "questions": {
+    "object": {
+      "type": "choice",
+      "instructions": "Which object is shown?",
+      "criteria": {"cat": "A cat", "dog": "A dog"}
+    }
+  }
+}
+```
 
 ### RSI-Jev
 

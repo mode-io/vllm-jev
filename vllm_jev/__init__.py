@@ -1,6 +1,6 @@
 """vLLM Jev: candidate scores via vLLM's native pooling engine."""
 
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 
 ARCHITECTURE = "VllmJevQwen35ForSequenceClassification"
 QWEN3_ARCHITECTURE = "VllmJevQwen3ForSequenceClassification"
@@ -11,6 +11,15 @@ VJEV_QWEN35_ARCHITECTURE = "VllmVjevQwen35ForTokenEmbedding"
 LAYA_MODERNBERT_ARCHITECTURE = "VllmLayaModernBertForTokenEmbedding"
 RSIJEV_QWEN35_ARCHITECTURE = "VllmRsiJevQwen35ForTokenEmbedding"
 CLEF_QWEN35_ARCHITECTURE = "VllmClefQwen35ForTokenEmbedding"
+JEVANY_POINTER_QWEN35_ARCHITECTURE = (
+    "VllmJevAnyPointerQwen35ForTokenEmbedding"
+)
+JEVANY_POINTER_QWEN35_MOE_ARCHITECTURE = (
+    "VllmJevAnyPointerQwen35MoeForTokenEmbedding"
+)
+JEVANY_POINTER_QWEN3_VL_MOE_ARCHITECTURE = (
+    "VllmJevAnyPointerQwen3VLMoeForTokenEmbedding"
+)
 
 
 def register() -> None:
@@ -32,6 +41,9 @@ def register() -> None:
         LAYA_MODERNBERT_ARCHITECTURE,
         RSIJEV_QWEN35_ARCHITECTURE,
         CLEF_QWEN35_ARCHITECTURE,
+        JEVANY_POINTER_QWEN35_ARCHITECTURE,
+        JEVANY_POINTER_QWEN35_MOE_ARCHITECTURE,
+        JEVANY_POINTER_QWEN3_VL_MOE_ARCHITECTURE,
     ):
         ModelRegistry.register_model(architecture, f"vllm_jev.model:{architecture}")
     if os.environ.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":

@@ -55,6 +55,7 @@ def main() -> None:
             "vjev_vision_v1",
             "rsijev_xattn_v1",
             "clef_joint_v1",
+            "jevany_pointer_v1",
             "kev_pointer_v1",
             "decider_slot_v1",
             "task_json_v1",
@@ -109,10 +110,13 @@ def main() -> None:
         laya_manifest = checkpoint / "laya_manifest.json"
         rsijev_manifest = checkpoint / "rsijev_manifest.json"
         clef_manifest = checkpoint / "clef_manifest.json"
+        jevany_pointer_manifest = checkpoint / "jevany_pointer_manifest.json"
         if sys.platform == "darwin" and rsijev_manifest.is_file():
             parser.error("RSI-Jev serving requires Linux and native vLLM")
         if sys.platform == "darwin" and clef_manifest.is_file():
             parser.error("Clef serving requires Linux and native vLLM")
+        if sys.platform == "darwin" and jevany_pointer_manifest.is_file():
+            parser.error("JevAny Pointer serving requires Linux and native vLLM")
         if sys.platform == "darwin" and (checkpoint / "rl_agent_config.json").is_file():
             from .mac_laya import identify_source
 
@@ -130,6 +134,8 @@ def main() -> None:
                     (
                         decision_manifest
                         if decision_manifest.is_file()
+                        else jevany_pointer_manifest
+                        if jevany_pointer_manifest.is_file()
                         else rsijev_manifest
                         if rsijev_manifest.is_file()
                         else clef_manifest
@@ -142,6 +148,7 @@ def main() -> None:
                     ).read_text()
                 )["source_repository"]
                 if decision_manifest.is_file()
+                or jevany_pointer_manifest.is_file()
                 or rsijev_manifest.is_file()
                 or clef_manifest.is_file()
                 or vjev_manifest.is_file()
@@ -164,6 +171,8 @@ def main() -> None:
             parser.error("RSI-Jev serving requires Linux and native vLLM")
         if sys.platform == "darwin" and model_id.startswith("Cloudflare/clef"):
             parser.error("Clef serving requires Linux and native vLLM")
+        if sys.platform == "darwin" and model_id.startswith("SimpleJev/JevAny-"):
+            parser.error("JevAny Pointer serving requires Linux and native vLLM")
         checkpoint = workspace / "checkpoint" / model_id
         prepare = [
             "-m",
@@ -190,7 +199,9 @@ def main() -> None:
     decision_manifest = checkpoint / "decision_manifest.json"
     rsijev_manifest = checkpoint / "rsijev_manifest.json"
     clef_manifest = checkpoint / "clef_manifest.json"
+    jevany_pointer_manifest = checkpoint / "jevany_pointer_manifest.json"
     is_decision = decision_manifest.is_file()
+    is_jevany_pointer = jevany_pointer_manifest.is_file()
     is_rsijev = rsijev_manifest.is_file()
     is_clef = clef_manifest.is_file()
     is_valen = valen_manifest.is_file()
@@ -202,6 +213,8 @@ def main() -> None:
         manifest_path = (
             decision_manifest
             if is_decision
+            else jevany_pointer_manifest
+            if is_jevany_pointer
             else rsijev_manifest
             if is_rsijev
             else clef_manifest
@@ -255,6 +268,26 @@ def main() -> None:
     if is_decision:
         defaults[defaults.index("--convert") + 1] = "embed"
         defaults.extend(["--dtype", "bfloat16"])
+    if is_jevany_pointer:
+        jevany_pointer = json.loads(jevany_pointer_manifest.read_text())
+        defaults[defaults.index("--max-model-len") + 1] = str(
+            jevany_pointer["max_length"] + 1
+        )
+        defaults[defaults.index("--enable-prefix-caching")] = (
+            "--no-enable-prefix-caching"
+        )
+        defaults.extend(
+            [
+                "--dtype",
+                "bfloat16",
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                json.dumps({"image": jevany_pointer["max_images"], "video": 0}),
+                "--mm-processor-kwargs",
+                json.dumps({"size": {"shortest_edge": 32 * 32, "longest_edge": 512 * 512}}),
+            ]
+        )
     if is_rsijev:
         rsijev = json.loads(rsijev_manifest.read_text())
         # Leave the scheduler's final slot outside the model's input budget.
@@ -293,7 +326,15 @@ def main() -> None:
                 json.dumps({"image": 8, "video": 1}),
             ]
         )
-    if is_valen or is_vjev or is_laya or is_decision or is_rsijev or is_clef:
+    if (
+        is_valen
+        or is_vjev
+        or is_laya
+        or is_decision
+        or is_jevany_pointer
+        or is_rsijev
+        or is_clef
+    ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
     command = [
         sys.executable,

@@ -51,7 +51,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
+- **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
 - **Automatic setup:** start a supported Hugging Face model ID with one command.
 
 ## Getting Started
@@ -117,6 +117,8 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
 
@@ -124,6 +126,8 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 <a id="clef-experimental"></a>
 
 The RSI-Jev Linux adapter was contributed by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2), and the Clef adapter by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4). See the [RSI-Jev](docs/guide.md#rsi-jev) and [Clef](docs/guide.md#clef) guides for input limits and request formats.
+
+The JevAny Pointer adapter was contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9). See the [JevAny guide](docs/guide.md#jevany-pointer) for requests and limits.
 
 ### Additional decision models (experimental)
 
@@ -165,6 +169,12 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
 ## Updates
+
+### 2026-10-13
+
+- Added Linux text/image serving for JevAny Pointer 4B and 27B, contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9).
+- Fixed automatic model preparation and explicit protocol selection. JevAny supports all six `context_order` permutations while preserving its Pointer readouts; native remains the default.
+- Verified serving, image handling, prompt ordering and cancellation recovery with regression checks and real-model stress tests.
 
 ### 2026-10-10
 

@@ -10,6 +10,10 @@ from vllm.model_executor.models.qwen3 import Qwen3ForCausalLM
 from vllm.model_executor.models.qwen3_5 import (
     Qwen3_5ForCausalLM,
     Qwen3_5ForConditionalGeneration,
+    Qwen3_5MoeForConditionalGeneration,
+)
+from vllm.model_executor.models.qwen3_vl_moe import (
+    Qwen3VLMoeForConditionalGeneration,
 )
 
 
@@ -76,6 +80,24 @@ class VllmClefQwen35ForTokenEmbedding(
     as_embedding_model(Qwen3_5ForConditionalGeneration)
 ):
     """Native Qwen3.5 image/video/text states for Clef's joint schema head."""
+
+
+class VllmJevAnyPointerQwen35ForTokenEmbedding(
+    as_embedding_model(Qwen3_5ForConditionalGeneration)
+):
+    """Native dense Qwen3.5 image/text states for JevAny's Pointer head."""
+
+
+class VllmJevAnyPointerQwen35MoeForTokenEmbedding(
+    as_embedding_model(Qwen3_5MoeForConditionalGeneration)
+):
+    """Native MoE Qwen3.5 image/text states for JevAny's Pointer head."""
+
+
+class VllmJevAnyPointerQwen3VLMoeForTokenEmbedding(
+    as_embedding_model(Qwen3VLMoeForConditionalGeneration)
+):
+    """Native MoE Qwen3-VL image/text states for JevAny's Pointer head."""
 
 
 class VllmJevQwen3ForTokenEmbedding(as_embedding_model(Qwen3ForCausalLM)):

@@ -62,6 +62,8 @@ def _publish(
         name = (
             "decision_manifest.json"
             if manifest.get("format") == "vllm-jev-decision-v1"
+            else "jevany_pointer_manifest.json"
+            if protocol == "jevany_pointer_v1"
             else "jev_manifest.json"
         )
         (temporary / name).write_text(json.dumps(manifest, indent=2) + "\n")
@@ -87,6 +89,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         "vjev_vision_v1",
         "rsijev_xattn_v1",
         "clef_joint_v1",
+        "jevany_pointer_v1",
         *DECISION_PROTOCOLS,
     ):
         raise ValueError(f"unknown protocol: {protocol}")
@@ -113,6 +116,51 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
 
 
 def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
+    from .jevany_export import MODELS as JEVANY_MODELS
+
+    if model_id in JEVANY_MODELS:
+        from .jevany_export import export_jevany_pointer, verify_jevany_pointer
+
+        if sys.platform == "darwin":
+            raise ValueError("JevAny Pointer serving requires Linux and native vLLM")
+        if protocol not in ("auto", "jevany_pointer_v1"):
+            raise ValueError(f"{model_id} uses jevany_pointer_v1, not {protocol}")
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            manifest = json.loads((output / "jevany_pointer_manifest.json").read_text())
+            if manifest.get("source_repository") != model_id:
+                raise ValueError("cached checkpoint belongs to another repository")
+            verify_jevany_pointer(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=JEVANY_MODELS[model_id],
+                token=False,
+                local_dir=workspace / "public" / model_id,
+            )
+        )
+        import torch
+
+        meta = torch.load(source / "head.pt", map_location="cpu", weights_only=True)
+        if not isinstance(meta.get("base"), str) or not meta.get("base_revision"):
+            raise ValueError("JevAny release must identify a pinned base checkpoint")
+        base = Path(
+            snapshot_download(
+                repo_id=meta["base"],
+                revision=meta["base_revision"],
+                token=False,
+                cache_dir=os.environ.get("HF_HUB_CACHE"),
+            )
+        )
+        return _publish(
+            output,
+            model_id,
+            JEVANY_MODELS[model_id],
+            "jevany_pointer_v1",
+            lambda temporary: export_jevany_pointer(base, source, temporary, model_id),
+        )
+
     from .laya_export import MODELS as LAYA_MODELS
 
     if model_id in LAYA_MODELS:
@@ -689,6 +737,7 @@ def main() -> None:
             "vjev_vision_v1",
             "rsijev_xattn_v1",
             "clef_joint_v1",
+            "jevany_pointer_v1",
             *DECISION_PROTOCOLS,
         ),
         default="auto",

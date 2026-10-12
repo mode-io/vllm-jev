@@ -22,3 +22,5 @@
 - [Qwen3](https://huggingface.co/Qwen/Qwen3-0.6B) and [Qwen3.5](https://huggingface.co/Qwen/Qwen3.5-2B) base weights are downloaded separately and are not included in this repository.
 
 - The README video demo includes archery footage from [nateraw/video-demo](https://huggingface.co/datasets/nateraw/video-demo), mirrored by [Hugging Face video fixtures](https://huggingface.co/datasets/hf-internal-testing/fixtures_videos). The upstream dataset and fixture provenance declare MIT. Only the composed demo media is included.
+
+- [JevAny](https://github.com/SimpleJev/JevAny) is released under Apache-2.0. The Pointer adapter follows its prompt delimiters, option-close/decision readouts, residual head and calibration. The adaptation was contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9). Upstream runtimes and model weights are not vendored.

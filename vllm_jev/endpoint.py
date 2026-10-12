@@ -57,6 +57,8 @@ class SystemOneRequest(BaseModel):
     # Clef takes media beside the state, as its model card documents.
     images: list[Any] | None = None
     videos: list[Any] | None = None
+    # JevAny preserves its training wire format: [{type: "image", uri: "..."}].
+    media: list[Any] | None = None
 
 
 async def _gather_cancel_on_error(coroutines):
@@ -603,7 +605,20 @@ class JevEndpointPlugin:
                     status_code=422,
                     detail="top-level images and videos are supported only by Clef",
                 )
+            jevany_pointer = getattr(
+                raw_request.app.state, "vllm_jevany_pointer_service", None
+            )
+            if payload.media and jevany_pointer is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="top-level media is supported only by JevAny",
+                )
             decision = getattr(raw_request.app.state, "vllm_decision_service", None)
+            if jevany_pointer is not None:
+                try:
+                    return await jevany_pointer.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             if decision is not None:
                 try:
                     return await decision.systemone(payload)
@@ -654,6 +669,7 @@ class JevEndpointPlugin:
         state.vllm_vjev_service = None
         state.vllm_rsijev_service = None
         state.vllm_clef_service = None
+        state.vllm_jevany_pointer_service = None
         manifest = Path(args.model) / "jev_manifest.json"
         valen_manifest = Path(args.model) / "valen_manifest.json"
         vjev_manifest = Path(args.model) / "vjev_manifest.json"
@@ -661,6 +677,9 @@ class JevEndpointPlugin:
         decision_manifest = Path(args.model) / "decision_manifest.json"
         rsijev_manifest = Path(args.model) / "rsijev_manifest.json"
         clef_manifest = Path(args.model) / "clef_manifest.json"
+        jevany_pointer_manifest = (
+            Path(args.model) / "jevany_pointer_manifest.json"
+        )
         if engine_client is None or not (
             manifest.is_file()
             or valen_manifest.is_file()
@@ -669,6 +688,7 @@ class JevEndpointPlugin:
             or decision_manifest.is_file()
             or rsijev_manifest.is_file()
             or clef_manifest.is_file()
+            or jevany_pointer_manifest.is_file()
         ):
             return
         max_inflight = int(os.environ.get("VLLM_JEV_MAX_INFLIGHT", "128"))
@@ -682,6 +702,17 @@ class JevEndpointPlugin:
                 Path(args.model),
                 getattr(args, "served_model_name", None) or "vllm-jev",
                 engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
+            )
+            return
+        if jevany_pointer_manifest.is_file():
+            from .jevany_pointer import JevAnyPointerService
+
+            state.vllm_jevany_pointer_service = JevAnyPointerService(
+                engine_client,
+                Path(args.model),
+                getattr(args, "served_model_name", None) or "jevany-pointer",
+                engine_client.model_config.max_model_len - 1,
                 max_inflight=max_inflight,
             )
             return
