@@ -46,6 +46,15 @@ def register() -> None:
         JEVANY_POINTER_QWEN3_VL_MOE_ARCHITECTURE,
     ):
         ModelRegistry.register_model(architecture, f"vllm_jev.model:{architecture}")
+    if os.environ.get("VLLM_JEV_RADIXFLOW_POLICY") not in (None, "", "off"):
+        from .radixflow.telemetry import install_copy_guard, install_executor_metrics
+
+        install_copy_guard()
+        install_executor_metrics()
+    if os.environ.get("VLLM_JEV_NATIVE_TRACE_DIR"):
+        from .radixflow.telemetry import install_executor_metrics
+
+        install_executor_metrics()
     if os.environ.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":
         from .online_prefix import install
 

@@ -24,6 +24,7 @@ dependencies = [
 
 [project.scripts]
 vllm-jev = "vllm_jev.cli:main"
+vllm-jev-radixflow = "vllm_jev.radixflow.launch:main"
 
 [project.entry-points."vllm.general_plugins"]
 vllm_jev_model = "vllm_jev:register"

@@ -52,6 +52,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
+- **RadixFlow (opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
 - **Automatic setup:** start a supported Hugging Face model ID with one command.
 
 ## Getting Started
@@ -168,10 +169,37 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
+## RadixFlow pressure comparison
+
+RadixFlow combines bounded admission, state-ready traversal and complete-state copying for shared-prefix scheduling. It is **opt-in on Linux**; ordinary serving defaults remain unchanged. [Enable it](docs/radixflow.md).
+
+Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged over **three fresh-service runs**. Native vLLM uses the same checkpoint/plugin, prefix caching and synchronous eager configuration. Short and long inputs come from RACE and QuALITY calibration questions; each condition has 32 requests per run.
+
+| Model | Input | Concurrency | Native vLLM req/s | RadixFlow req/s | Gain vs native | Speed vs author |
+|---|---|---:|---:|---:|---:|---:|
+| Open-Jev-2B | Short | 1 | 7.53 | 11.54 | +53.3% | 1.79× |
+| Open-Jev-2B | Short | 8 | 35.57 | 38.91 | +9.4% | 6.06× |
+| Open-Jev-2B | Short | 32 | 50.19 | 50.82 | +1.3% | 7.90× |
+| Open-Jev-2B | Long | 1 | 4.90 | 4.59 | −6.3% | 6.73× |
+| Open-Jev-2B | Long | 8 | 8.39 | 8.77 | +4.5% | 12.85× |
+| Open-Jev-2B | Long | 32 | 9.36 | 9.65 | +3.1% | 14.16× |
+| Open-Jev-9B | Short | 1 | 5.74 | 8.12 | +41.4% | 2.01× |
+| Open-Jev-9B | Short | 8 | 16.22 | 16.61 | +2.4% | 4.08× |
+| Open-Jev-9B | Short | 32 | 17.70 | 18.12 | +2.4% | 4.49× |
+| Open-Jev-9B | Long | 1 | 2.31 | 2.22 | −4.0% | 9.12× |
+| Open-Jev-9B | Long | 8 | 2.98 | 2.99 | +0.4% | 12.31× |
+| Open-Jev-9B | Long | 32 | 3.04 | 3.08 | +1.4% | 12.69× |
+
+The author comparison includes differences in backend, batching and cache support; its installed runtime uses the published PyTorch fallback without optional FLA/causal-conv1d kernels. These gains are workload-dependent; the short C1 gain includes admission/pooling changes, while long C8/C32 record confirmed dependency bypasses. [Full results](docs/radixflow-benchmarks.md) include variation, latency, worker steps, host time, actual token reuse and output agreement.
+
+A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b-compatibility-control) also covers concurrency 1/8/32. It improves low-concurrency throughput but regresses at higher concurrency and changes 15/288 paired selected answers; it is not a recommended RadixFlow deployment case.
+
 ## Updates
 
 ### 2026-10-13
 
+- Added opt-in RadixFlow scheduling for synchronous Linux serving with prefix caching. The default serving path is unchanged; [setup and supported configurations](docs/radixflow.md).
+- Added three-run pressure comparisons on Open-Jev-2B and Open-Jev-9B, plus an OpenJev-0.6B compatibility control. Results include worker-round counts, actual token reuse and selected-answer agreement. [Results and measurement details](docs/radixflow-benchmarks.md).
 - Added Linux text/image serving for JevAny Pointer 4B and 27B, contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9).
 - Fixed automatic model preparation and explicit protocol selection. JevAny supports all six `context_order` permutations while preserving its Pointer readouts; native remains the default.
 - Verified serving, image handling, prompt ordering and cancellation recovery with regression checks and real-model stress tests.
