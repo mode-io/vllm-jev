@@ -20,6 +20,18 @@
 
 ## Demos
 
+### 🎉 庆祝 RadixFlow！ · Celebrating RadixFlow (experimental)
+
+[![RadixFlow explainer video](docs/assets/radixflow-explainer-poster.jpg)](docs/assets/radixflow-explainer.mp4)
+
+[Watch the RadixFlow explainer](docs/assets/radixflow-explainer.mp4).
+
+Our [first PR](https://github.com/mode-io/vllm-jev/pull/1), which explored shared-prefix reuse and cache-on/off behavior, inspired us to look more closely at what happens after a cache hit. Reuse matters especially for prefill: Jev scores candidate branches through prefill, so reusing their common prefix avoids repeated computation.
+
+We found a scheduling gap: a matching prefix can still have hybrid state being produced in the current round. Stopping the scan at that pending branch leaves room that independent ready branches could use. **RadixFlow defers the pending branch, continues selecting ready work, and rechecks it after completion.** The engineering integration recovered executable capacity in the tested hybrid models; the [pressure comparisons](docs/radixflow-benchmarks.md) report the resulting worker rounds, speed and token reuse.
+
+RadixFlow is **experimental and disabled by default**. Enable it with `--radixflow true` on [supported configurations](docs/radixflow.md#scope).
+
 ### Video understanding: live comparison
 
 ![Valen answering 24 questions about an archery video: No vLLM Jev and vLLM Jev](docs/assets/valen-video-live.gif)
@@ -52,7 +64,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
-- **RadixFlow (opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
+- **RadixFlow (experimental, opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
 - **Automatic setup:** start a supported Hugging Face model ID with one command.
 
 ## Getting Started
@@ -171,7 +183,7 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## RadixFlow pressure comparison
 
-RadixFlow combines bounded admission, state-ready traversal and complete-state copying for shared-prefix scheduling. It is **opt-in on Linux**; ordinary serving defaults remain unchanged. [Enable it](docs/radixflow.md).
+RadixFlow combines bounded admission, state-ready traversal and complete-state copying for shared-prefix scheduling. It is **experimental and opt-in on Linux**; ordinary serving defaults remain unchanged. [Enable it](docs/radixflow.md).
 
 Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged over **three fresh-service runs**. Native vLLM uses the same checkpoint/plugin, prefix caching and synchronous eager configuration. Short and long inputs come from RACE and QuALITY calibration questions; each condition has 32 requests per run.
 
@@ -198,6 +210,7 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ### 2026-10-14
 
+- Added the RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
 - Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
 - Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
 

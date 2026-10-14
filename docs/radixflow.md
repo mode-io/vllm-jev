@@ -1,7 +1,9 @@
-# RadixFlow engineering integration
+# RadixFlow engineering integration (experimental)
 
 See [validation record](radixflow-validation.md) for the exercised checks and
 [pressure comparisons](radixflow-benchmarks.md) for matched serving measurements.
+
+**Status: experimental, opt-in, disabled by default.**
 
 RadixFlow uses the native vLLM cache allocator and complete hybrid state. It
 changes admission and the response to a confirmed current-round dependency.
