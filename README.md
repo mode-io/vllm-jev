@@ -375,3 +375,20 @@ Report bugs and feature requests in [Issues](https://github.com/mode-io/vllm-jev
 ## License
 
 Apache-2.0. The Choice prompt follows MIT-licensed [Open-Jev](https://github.com/Zefan-Cai/Open-Jev); see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Citation
+
+If you use vLLM Jev in your research, please cite our paper:
+[RadixFlow: Filling Execution Bubbles in Prefix-Cached Hybrid LLM Serving](https://arxiv.org/abs/2610.18143).
+
+```bibtex
+@misc{jing2026radixflow,
+  title         = {{RadixFlow}: Filling Execution Bubbles in Prefix-Cached Hybrid {LLM} Serving},
+  author        = {Huihao Jing and Wenbin Hu and Shaojin Chen and Haochen Shi and Haoyu Huang and Sirui Zhang and Yuxuan Liu and Zhongwei Xie and Haoran Li},
+  year          = {2026},
+  eprint        = {2610.18143},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AI},
+  url           = {https://arxiv.org/abs/2610.18143}
+}
+```
