@@ -44,6 +44,9 @@ The same Valen checkpoint answers **24 structured questions about one video**, u
 
 Valen 2B answers six [GameQA Maze](https://huggingface.co/datasets/Valen-Team/Valen-Eval-General-5k) image questions locally on an Apple M5 using MLX. The display follows live HTTP responses. [Watch the MP4](docs/assets/mac-valen-maze-live.mp4).
 
+<details>
+<summary>More demos</summary>
+
 ### Multimodal: live Sokoban
 
 ![Five live Valen Sokoban games: No vLLM Jev and vLLM Jev](docs/assets/valen-sokoban-five-live.gif)
@@ -55,6 +58,8 @@ Both runtimes played the same five levels from [Valen's Sokoban evaluation set](
 ![Live Open-Jev-2B text decisions: No vLLM Jev and vLLM Jev](docs/assets/open-jev-2b-parallel-text-live.gif)
 
 The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP server and vLLM Jev received the same 40 text-only Choice requests at once, on one A800 each.
+
+</details>
 
 ## About
 
@@ -183,6 +188,9 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 
 ## RadixFlow pressure comparison
 
+<details>
+<summary>RadixFlow benchmark results</summary>
+
 RadixFlow combines bounded admission, state-ready traversal and complete-state copying for shared-prefix scheduling. It is **experimental and opt-in on Linux**; ordinary serving defaults remain unchanged. [Enable it](docs/radixflow.md).
 
 Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged over **three fresh-service runs**. Native vLLM uses the same checkpoint/plugin, prefix caching and synchronous eager configuration. Short and long inputs come from RACE and QuALITY calibration questions; each condition has 32 requests per run.
@@ -207,6 +215,8 @@ Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged
 The author comparison includes differences in backend, batching and cache support; its installed runtime uses the published PyTorch fallback without optional FLA/causal-conv1d kernels. These gains are workload-dependent; the short C1 gain includes admission/pooling changes, while long C8/C32 record confirmed dependency bypasses. [Full results](docs/radixflow-benchmarks.md) include variation, latency, worker steps, host time, actual token reuse and output agreement.
 
 A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b-compatibility-control) also covers concurrency 1/8/32. It improves low-concurrency throughput but regresses at higher concurrency and changes 15/288 paired selected answers; it is not a recommended RadixFlow deployment case.
+
+</details>
 
 ## Updates
 
@@ -296,6 +306,9 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Inference performance
 
+<details>
+<summary>Inference benchmarks and measurement notes</summary>
+
 ### Apple Silicon
 
 Measured on an **Apple M5 with 16 GB unified memory**, using MLX: 96 text Choice requests for OpenJev and 42 GameQA Maze image questions for Valen. Requests are sequential after warmup; model loading is excluded.
@@ -350,6 +363,8 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 - ⁴ vjev uses the author's Python scorer versus vLLM Jev HTTP on 100 identical game images and the same A800. Only the vLLM side includes HTTP time. This measures serving speed, not game accuracy.
 - ⁵ Laya compares the published `laya-serve` 0.3.20 with vLLM Jev HTTP on the same A800 and 500 fixed four-choice questions. Labels differed on 6/500 questions; the largest option-probability difference was 0.0222. Laya's direct `predict_batch` SDK can be faster for many states sharing one question schema; the HTTP figures do not measure that bulk path. The optional TileLang fast path was unavailable with this server's CUDA toolkit.
 - ⁶ The two additional Laya checkpoints use the same 500 English MMLU questions and A800 HTTP setup as ⁵. Their labels differed from the author's runtime on 7/500 (multilingual) and 2/500 (typed) questions. This tests serving on a shared English workload, not multilingual or typed-task quality.
+
+</details>
 
 </details>
 
