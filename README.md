@@ -202,6 +202,8 @@ Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged
 | Open-Jev-9B | Long | 8 | 2.98 | 2.99 | +0.4% | 12.31× |
 | Open-Jev-9B | Long | 32 | 3.04 | 3.08 | +1.4% | 12.69× |
 
+**Across our tested conditions, RadixFlow delivers up to 53.3% higher decision throughput than native vLLM with prefix caching**, measured on Open-Jev-2B with short inputs at concurrency 1 and averaged over three fresh-service runs.
+
 The author comparison includes differences in backend, batching and cache support; its installed runtime uses the published PyTorch fallback without optional FLA/causal-conv1d kernels. These gains are workload-dependent; the short C1 gain includes admission/pooling changes, while long C8/C32 record confirmed dependency bypasses. [Full results](docs/radixflow-benchmarks.md) include variation, latency, worker steps, host time, actual token reuse and output agreement.
 
 A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b-compatibility-control) also covers concurrency 1/8/32. It improves low-concurrency throughput but regresses at higher concurrency and changes 15/288 paired selected answers; it is not a recommended RadixFlow deployment case.
