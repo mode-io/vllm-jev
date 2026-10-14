@@ -20,7 +20,7 @@
 
 ## Demos
 
-### 🎉 庆祝 RadixFlow！ · Celebrating RadixFlow (experimental)
+### 🎉 Celebrating RadixFlow! (experimental)
 
 [![RadixFlow explainer video](docs/assets/radixflow-explainer-poster.jpg)](docs/assets/radixflow-explainer.mp4)
 
