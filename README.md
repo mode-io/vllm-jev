@@ -224,6 +224,9 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 - Fixed automatic model preparation and explicit protocol selection. JevAny supports all six `context_order` permutations while preserving its Pointer readouts; native remains the default.
 - Verified serving, image handling, prompt ordering and cancellation recovery with regression checks and real-model stress tests.
 
+<details>
+<summary>Earlier updates</summary>
+
 ### 2026-10-10
 
 - Added `context_order` with all six instructions/criteria/state permutations across supported models. Existing presets remain compatible; see the [configuration guide](docs/guide.md#decision-templates).
@@ -288,6 +291,8 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 - Added multimodal decision inference with support for text and images.
 - Added a fused Tiny-Jev head: **12.1% higher throughput** in the measured 16-option, 16-concurrent workload.
 - On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Results](#inference-performance).
+
+</details>
 
 ## Inference performance
 
