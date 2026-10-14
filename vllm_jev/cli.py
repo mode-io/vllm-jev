@@ -77,6 +77,12 @@ def main() -> None:
             "--help" if value.startswith("--help=") else value for value in arguments
         ]
     args, extra = parser.parse_known_args(arguments)
+    from .radixflow.launch import selected_policy
+
+    try:
+        args.radixflow_policy = selected_policy(args)
+    except ValueError as error:
+        parser.error(str(error))
     from .decision_template import ENVIRONMENT, current_template, load_template
 
     try:

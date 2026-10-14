@@ -1,5 +1,6 @@
 """CPU regression tests for scheduling safety and bounded lifecycle."""
 
+import argparse
 import importlib
 import sys
 import tempfile
@@ -11,11 +12,42 @@ from types import SimpleNamespace as NS
 from unittest.mock import patch
 
 from vllm_jev.radixflow.adapter import adapt_schedule
-from vllm_jev.radixflow.launch import configure
+from vllm_jev.radixflow.launch import arguments, configure, selected_policy
 from vllm_jev.radixflow.policy import Admission, Config, RoundState
 
 
 class PolicyTests(unittest.TestCase):
+    def test_boolean_switch_and_legacy_policy(self):
+        parser = argparse.ArgumentParser()
+        arguments(parser)
+        for flags, expected in [
+            ([], "off"),
+            (["--radixflow"], "radixflow"),
+            (["--radixflow", "true"], "radixflow"),
+            (["--radixflow=false"], "off"),
+            (["--no-radixflow"], "off"),
+            (["--radixflow-policy", "flex"], "flex"),
+        ]:
+            self.assertEqual(selected_policy(parser.parse_args(flags)), expected)
+        with self.assertRaises(ValueError):
+            selected_policy(
+                parser.parse_args(
+                    ["--radixflow", "false", "--radixflow-policy", "radixflow"]
+                )
+            )
+
+    def test_switch_uses_configured_library_and_preserves_native_flags(self):
+        parser = argparse.ArgumentParser()
+        arguments(parser)
+        with tempfile.NamedTemporaryFile() as f:
+            env = {"VLLM_JEV_RADIXFLOW_LIBRARY": f.name}
+            flags = ["--tensor-parallel-size", "2", "--max-num-seqs", "32"]
+            original = flags.copy()
+            result = configure(parser.parse_args(["--radixflow", "true"]), flags, env)
+            self.assertEqual(env["VLLM_JEV_RADIXFLOW_POLICY"], "radixflow")
+            self.assertIn("--enable-prefix-caching", result)
+            self.assertEqual(flags, original)
+
     def test_admission_early_release_and_deadline(self):
         requests = [NS(request_id=f"r{i}") for i in range(8)]
         for n in (1, 2, 4, 8):

@@ -28,11 +28,37 @@ validation; deployment coverage and speed comparisons use separate matched runs.
 python scripts/build_radixflow.py --output /your/runtime/libjev_radixflow.so
 pip install -e . --no-deps
 vllm-jev-radixflow /your/model \
-  --radixflow-policy radixflow \
+  --radixflow true \
   --radixflow-library /your/runtime/libjev_radixflow.so \
   --radixflow-trace-dir /your/runtime/radixflow-traces \
   --max-num-seqs 64 --max-num-batched-tokens 8192
 ```
+
+The public switch accepts `--radixflow true`, `--radixflow false`,
+`--radixflow` and `--no-radixflow`. It defaults to disabled. The old
+`--radixflow-policy` option remains available for experiments; contradictory
+switch/policy settings are rejected.
+
+Build the Rust library once, then set its path for subsequent launches:
+
+```bash
+export VLLM_JEV_RADIXFLOW_LIBRARY=/your/runtime/libjev_radixflow.so
+# Ordinary generative model, using its native vLLM implementation:
+vllm-jev-radixflow /your/model --radixflow true --max-num-seqs 64
+# Jev checkpoint:
+vllm-jev serve ZefanCai/Open-Jev-2B --radixflow true
+# Disable; retain ordinary serving behavior:
+vllm-jev serve ZefanCai/Open-Jev-2B --radixflow false
+```
+
+The integration does not use a model-name allowlist. It supports native
+prefix-cache-compatible models through the same scheduler interface. This is
+not a claim that every architecture/configuration has been validated or gains
+speed. All-attention models use admission; compatible hybrid state managers
+also use dependency deferral. Models whose all-token readouts require prefix
+caching to be disabled retain that constraint and reject explicit enablement.
+The generic launcher forwards model, quantization and tensor-parallel arguments
+to vLLM without exporting or replacing the model.
 
 The generative launcher uses the original model, tokenizer, forward pass and
 sampling. It does not export a Jev head. Existing Jev serving accepts the same

@@ -196,6 +196,11 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Updates
 
+### 2026-10-14
+
+- Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
+- Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
+
 ### 2026-10-13
 
 - Added opt-in RadixFlow scheduling for synchronous Linux serving with prefix caching. The default serving path is unchanged; [setup and supported configurations](docs/radixflow.md).
