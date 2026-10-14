@@ -22,9 +22,7 @@
 
 ### 🎉 Celebrating RadixFlow! (experimental)
 
-[![RadixFlow explainer video](docs/assets/radixflow-explainer-poster.jpg)](docs/assets/radixflow-explainer.mp4)
-
-[Watch the RadixFlow explainer](docs/assets/radixflow-explainer.mp4).
+https://github.com/user-attachments/assets/738493b2-67d5-4e2f-8d68-75b68e2c9dec
 
 Our [first PR](https://github.com/mode-io/vllm-jev/pull/1), which explored shared-prefix reuse and cache-on/off behavior, inspired us to look more closely at what happens after a cache hit. Reuse matters especially for prefill: Jev scores candidate branches through prefill, so reusing their common prefix avoids repeated computation.
 
@@ -212,7 +210,7 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ### 2026-10-14
 
-- Added the RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
+- Added the inline RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
 - Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
 - Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
 
