@@ -1,0 +1,346 @@
+{
+  "model": "IamBusy/OpenJev-0.6B",
+  "scope": "full-attention compatibility control, short inputs only; no author comparison",
+  "summary": [
+    {
+      "case": "short",
+      "C": 1,
+      "backend": "native",
+      "wall_s": {
+        "mean": 1.4166681055600445,
+        "sd": 0.013957728775225251
+      },
+      "req_s": {
+        "mean": 22.589681196920132,
+        "sd": 0.22362628882477154
+      },
+      "mean_ms": {
+        "mean": 44.074617025520034,
+        "sd": 0.42171489464693995
+      },
+      "p50_ms": {
+        "mean": 42.996443497637905,
+        "sd": 0.3109434463132083
+      },
+      "p95_ms": {
+        "mean": 45.9107899107039,
+        "sd": 0.7184239009587606
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 63,
+        "sd": 1.0
+      },
+      "mean_host_ms": {
+        "mean": 19.12682322680652,
+        "sd": 0.14010098744196137
+      },
+      "mean_core_ms": {
+        "mean": 19.58057913524866,
+        "sd": 0.15186690891923724
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    {
+      "case": "short",
+      "C": 1,
+      "backend": "radixflow",
+      "wall_s": {
+        "mean": 1.0253454095994432,
+        "sd": 0.013763969135922469
+      },
+      "req_s": {
+        "mean": 31.212766181007556,
+        "sd": 0.4213805127118666
+      },
+      "mean_ms": {
+        "mean": 31.872134413182113,
+        "sd": 0.4459188226264915
+      },
+      "p50_ms": {
+        "mean": 30.560012285908062,
+        "sd": 0.37530081272293125
+      },
+      "p95_ms": {
+        "mean": 32.89291985953847,
+        "sd": 0.6886881440047894
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 32,
+        "sd": 0.0
+      },
+      "mean_host_ms": {
+        "mean": 20.230094625,
+        "sd": 0.3342816412916223
+      },
+      "mean_core_ms": {
+        "mean": 20.8725345625,
+        "sd": 0.3516973351109188
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    {
+      "case": "short",
+      "C": 8,
+      "backend": "native",
+      "wall_s": {
+        "mean": 0.2121649868786335,
+        "sd": 0.0076854786857108465
+      },
+      "req_s": {
+        "mean": 150.95929992971,
+        "sd": 5.520062217559396
+      },
+      "mean_ms": {
+        "mean": 49.60194861632772,
+        "sd": 1.8716663415737527
+      },
+      "p50_ms": {
+        "mean": 43.85083851714929,
+        "sd": 0.42810956850596615
+      },
+      "p95_ms": {
+        "mean": 79.17731180787086,
+        "sd": 6.279317502781947
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 9,
+        "sd": 0.0
+      },
+      "mean_host_ms": {
+        "mean": 20.558693518518517,
+        "sd": 0.7468166088567871
+      },
+      "mean_core_ms": {
+        "mean": 21.990973037037037,
+        "sd": 0.7427330616318807
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    {
+      "case": "short",
+      "C": 8,
+      "backend": "radixflow",
+      "wall_s": {
+        "mean": 0.24505673442035913,
+        "sd": 0.03486864023609508
+      },
+      "req_s": {
+        "mean": 132.47469512242571,
+        "sd": 19.9897681356775
+      },
+      "mean_ms": {
+        "mean": 56.23285494705973,
+        "sd": 7.351967764231737
+      },
+      "p50_ms": {
+        "mean": 59.6173961336414,
+        "sd": 11.082515565941035
+      },
+      "p95_ms": {
+        "mean": 72.33395000609258,
+        "sd": 7.409710443795099
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 10,
+        "sd": 1.7320508075688772
+      },
+      "mean_host_ms": {
+        "mean": 20.337322946969696,
+        "sd": 0.7567779430985014
+      },
+      "mean_core_ms": {
+        "mean": 21.835855352272727,
+        "sd": 0.8384526349200622
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    {
+      "case": "short",
+      "C": 32,
+      "backend": "native",
+      "wall_s": {
+        "mean": 0.20890297243992487,
+        "sd": 0.004605564838762739
+      },
+      "req_s": {
+        "mean": 153.23019708250277,
+        "sd": 3.336287890347355
+      },
+      "mean_ms": {
+        "mean": 133.8158670308379,
+        "sd": 3.1760662245770233
+      },
+      "p50_ms": {
+        "mean": 132.1767147940894,
+        "sd": 3.6368010347206714
+      },
+      "p95_ms": {
+        "mean": 197.42805589921772,
+        "sd": 4.358393548382594
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 9,
+        "sd": 0.0
+      },
+      "mean_host_ms": {
+        "mean": 20.22594188888889,
+        "sd": 0.2586397933015127
+      },
+      "mean_core_ms": {
+        "mean": 21.714393962962962,
+        "sd": 0.27055742403694916
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    },
+    {
+      "case": "short",
+      "C": 32,
+      "backend": "radixflow",
+      "wall_s": {
+        "mean": 0.2243486267204086,
+        "sd": 0.0074846372640950355
+      },
+      "req_s": {
+        "mean": 142.7394127950625,
+        "sd": 4.688133258888198
+      },
+      "mean_ms": {
+        "mean": 136.69412806242084,
+        "sd": 4.816036973925234
+      },
+      "p50_ms": {
+        "mean": 140.05229637647668,
+        "sd": 5.106770833199449
+      },
+      "p95_ms": {
+        "mean": 200.01379932897785,
+        "sd": 6.209843015544598
+      },
+      "reuse_pct": {
+        "mean": 82.4940972389534,
+        "sd": 0.0
+      },
+      "worker_steps": {
+        "mean": 9,
+        "sd": 0.0
+      },
+      "mean_host_ms": {
+        "mean": 20.360362259259258,
+        "sd": 0.7512524771092416
+      },
+      "mean_core_ms": {
+        "mean": 21.970752592592593,
+        "sd": 0.748450192312001
+      },
+      "recovered": {
+        "mean": 0,
+        "sd": 0.0
+      }
+    }
+  ],
+  "comparison": [
+    {
+      "case": "short",
+      "C": 1,
+      "native": {
+        "throughput_ratio": {
+          "mean": 1.381917459389451,
+          "sd": 0.03084477722635555
+        },
+        "choice_agreement_pct": 93.75,
+        "max_prob_delta": 0.03650798304695502,
+        "paired_responses": 96
+      }
+    },
+    {
+      "case": "short",
+      "C": 8,
+      "native": {
+        "throughput_ratio": {
+          "mean": 0.8780335503957761,
+          "sd": 0.13447975785485547
+        },
+        "choice_agreement_pct": 94.79166666666667,
+        "max_prob_delta": 0.043124796614640915,
+        "paired_responses": 96
+      }
+    },
+    {
+      "case": "short",
+      "C": 32,
+      "native": {
+        "throughput_ratio": {
+          "mean": 0.9313996945679747,
+          "sd": 0.012294177783587252
+        },
+        "choice_agreement_pct": 95.83333333333333,
+        "max_prob_delta": 0.043124796614640915,
+        "paired_responses": 96
+      }
+    }
+  ],
+  "audit": {
+    "logical_requests": 576,
+    "cells": 18,
+    "repeats": 3,
+    "branch_intervals": 2304,
+    "token_conservation": true,
+    "choice_disagreements": 15,
+    "paired_responses": 288
+  },
+  "configuration": {
+    "sequence_slots": 16,
+    "token_budget": 8192,
+    "max_prefix_tokens": 768,
+    "max_suffix_tokens": 192
+  },
+  "source_sha256": {
+    "run.py": "f2bcae4cbbe1d480ec25c82dd984be3cbd0780a15f6948040affda84688000b1",
+    "prepare.py": "291c1fbca1ed022e36bdd94e98d53edee2960235ff2feaa3eb64f7399d6bb6af",
+    "DATA_LOCK.json": "ab9a17afb56af3004ce1d8a5d89677c88a16b2b2e8b515e8454bdc525e5793a1",
+    "ANALYSIS.json": "1aa92e74f2422e8e247166ee332f1fbff80081a0444a5243d4e057434717c8de",
+    "TOKEN_CONSERVATION.json": "27d6f5c4ab91b6214608978f1049284e9b6c6c44bb02bb40f924d31bd854f689",
+    "responses.jsonl": "2b7e66601a34128623591ea3583f5a10dadd8cb2fa2cfcb70cff834a04fabaf9",
+    "cells.jsonl": "4c46a1d3ccab83354fdd1ec13a09adf9b2405b0f95383b3a8c9d9c16e25ccbff",
+    "COMPLETE.json": "d21214b5dc07028d3326e6c15213a9d67d5e92e89c597fea2ca8c961bf2c8225"
+  },
+  "engineering_source_sha256": {
+    "vllm_jev/radixflow/scheduler.py": "472e5c8c997a521823c767a00144e33e6d20553f07dd5a1ede48e7e60558cc09",
+    "vllm_jev/radixflow/telemetry.py": "968c05e36f3d9a256418cff922b07518328f6272d7ac6c14ae490188d753be63"
+  }
+}

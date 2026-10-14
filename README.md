@@ -20,6 +20,18 @@
 
 ## Demos
 
+### 🎉 Celebrating RadixFlow! (experimental)
+
+https://github.com/user-attachments/assets/d99f5a8d-d715-4a79-8870-e56a6e48c073
+
+Our [first PR](https://github.com/mode-io/vllm-jev/pull/1), which explored shared-prefix reuse and cache-on/off behavior, inspired us to look more closely at what happens after a cache hit. Reuse matters especially for prefill: Jev scores candidate branches through prefill, so reusing their common prefix avoids repeated computation.
+
+We found a scheduling gap: a matching prefix can still have hybrid state being produced in the current round. Stopping the scan at that pending branch leaves room that independent ready branches could use. **RadixFlow defers the pending branch, continues selecting ready work, and rechecks it after completion.** The engineering integration recovered executable capacity in the tested hybrid models; the [pressure comparisons](docs/radixflow-benchmarks.md) report the resulting worker rounds, speed and token reuse.
+
+RadixFlow is **experimental and disabled by default**. Enable it with `--radixflow true` on [supported configurations](docs/radixflow.md#scope).
+
+We welcome bug reports, feedback, and discussions—please share your experience with RadixFlow!
+
 ### Video understanding: live comparison
 
 ![Valen answering 24 questions about an archery video: No vLLM Jev and vLLM Jev](docs/assets/valen-video-live.gif)
@@ -31,6 +43,9 @@ The same Valen checkpoint answers **24 structured questions about one video**, u
 ![Valen answering six GameQA Maze image questions locally on an Apple Silicon Mac](docs/assets/mac-valen-maze-live.gif)
 
 Valen 2B answers six [GameQA Maze](https://huggingface.co/datasets/Valen-Team/Valen-Eval-General-5k) image questions locally on an Apple M5 using MLX. The display follows live HTTP responses. [Watch the MP4](docs/assets/mac-valen-maze-live.mp4).
+
+<details>
+<summary>More demos</summary>
 
 ### Multimodal: live Sokoban
 
@@ -44,6 +59,8 @@ Both runtimes played the same five levels from [Valen's Sokoban evaluation set](
 
 The [Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) author HTTP server and vLLM Jev received the same 40 text-only Choice requests at once, on one A800 each.
 
+</details>
+
 ## About
 
 vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.com/vllm-project/vllm). Give it a question and candidate answers; it returns a label and a probability for each candidate.
@@ -52,6 +69,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
+- **RadixFlow (experimental, opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
 - **Automatic setup:** start a supported Hugging Face model ID with one command.
 
 ## Getting Started
@@ -168,13 +186,56 @@ See the [user guide](docs/guide.md) for supported models, serving options, and C
 
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
+## RadixFlow pressure comparison
+
+<details>
+<summary>RadixFlow benchmark results</summary>
+
+RadixFlow combines bounded admission, state-ready traversal and complete-state copying for shared-prefix scheduling. It is **experimental and opt-in on Linux**; ordinary serving defaults remain unchanged. [Enable it](docs/radixflow.md).
+
+Open-Jev-2B/9B throughput below is four-candidate decisions per second, averaged over **three fresh-service runs**. Native vLLM uses the same checkpoint/plugin, prefix caching and synchronous eager configuration. Short and long inputs come from RACE and QuALITY calibration questions; each condition has 32 requests per run.
+
+| Model | Input | Concurrency | Native vLLM req/s | RadixFlow req/s | Gain vs native | Speed vs author |
+|---|---|---:|---:|---:|---:|---:|
+| Open-Jev-2B | Short | 1 | 7.53 | 11.54 | +53.3% | 1.79× |
+| Open-Jev-2B | Short | 8 | 35.57 | 38.91 | +9.4% | 6.06× |
+| Open-Jev-2B | Short | 32 | 50.19 | 50.82 | +1.3% | 7.90× |
+| Open-Jev-2B | Long | 1 | 4.90 | 4.59 | −6.3% | 6.73× |
+| Open-Jev-2B | Long | 8 | 8.39 | 8.77 | +4.5% | 12.85× |
+| Open-Jev-2B | Long | 32 | 9.36 | 9.65 | +3.1% | 14.16× |
+| Open-Jev-9B | Short | 1 | 5.74 | 8.12 | +41.4% | 2.01× |
+| Open-Jev-9B | Short | 8 | 16.22 | 16.61 | +2.4% | 4.08× |
+| Open-Jev-9B | Short | 32 | 17.70 | 18.12 | +2.4% | 4.49× |
+| Open-Jev-9B | Long | 1 | 2.31 | 2.22 | −4.0% | 9.12× |
+| Open-Jev-9B | Long | 8 | 2.98 | 2.99 | +0.4% | 12.31× |
+| Open-Jev-9B | Long | 32 | 3.04 | 3.08 | +1.4% | 12.69× |
+
+**Across our tested conditions, RadixFlow delivers up to 53.3% higher decision throughput than native vLLM with prefix caching**, measured on Open-Jev-2B with short inputs at concurrency 1 and averaged over three fresh-service runs.
+
+The author comparison includes differences in backend, batching and cache support; its installed runtime uses the published PyTorch fallback without optional FLA/causal-conv1d kernels. These gains are workload-dependent; the short C1 gain includes admission/pooling changes, while long C8/C32 record confirmed dependency bypasses. [Full results](docs/radixflow-benchmarks.md) include variation, latency, worker steps, host time, actual token reuse and output agreement.
+
+A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b-compatibility-control) also covers concurrency 1/8/32. It improves low-concurrency throughput but regresses at higher concurrency and changes 15/288 paired selected answers; it is not a recommended RadixFlow deployment case.
+
+</details>
+
 ## Updates
+
+### 2026-10-14
+
+- Added the inline RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
+- Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
+- Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
 
 ### 2026-10-13
 
+- Added opt-in RadixFlow scheduling for synchronous Linux serving with prefix caching. The default serving path is unchanged; [setup and supported configurations](docs/radixflow.md).
+- Added three-run pressure comparisons on Open-Jev-2B and Open-Jev-9B, plus an OpenJev-0.6B compatibility control. Results include worker-round counts, actual token reuse and selected-answer agreement. [Results and measurement details](docs/radixflow-benchmarks.md).
 - Added Linux text/image serving for JevAny Pointer 4B and 27B, contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9).
 - Fixed automatic model preparation and explicit protocol selection. JevAny supports all six `context_order` permutations while preserving its Pointer readouts; native remains the default.
 - Verified serving, image handling, prompt ordering and cancellation recovery with regression checks and real-model stress tests.
+
+<details>
+<summary>Earlier updates</summary>
 
 ### 2026-10-10
 
@@ -241,7 +302,12 @@ For image questions, start a [supported vision model](docs/guide.md#supported-mo
 - Added a fused Tiny-Jev head: **12.1% higher throughput** in the measured 16-option, 16-concurrent workload.
 - On 500 Valen image questions, median latency fell from **231.9 to 77.3 ms** (**3.0×**) with **86.8% target-support accuracy** on both paths. [Results](#inference-performance).
 
+</details>
+
 ## Inference performance
+
+<details>
+<summary>Inference benchmarks and measurement notes</summary>
 
 ### Apple Silicon
 
@@ -297,6 +363,8 @@ Paired values: **Without vLLM Jev → With vLLM Jev**.
 - ⁴ vjev uses the author's Python scorer versus vLLM Jev HTTP on 100 identical game images and the same A800. Only the vLLM side includes HTTP time. This measures serving speed, not game accuracy.
 - ⁵ Laya compares the published `laya-serve` 0.3.20 with vLLM Jev HTTP on the same A800 and 500 fixed four-choice questions. Labels differed on 6/500 questions; the largest option-probability difference was 0.0222. Laya's direct `predict_batch` SDK can be faster for many states sharing one question schema; the HTTP figures do not measure that bulk path. The optional TileLang fast path was unavailable with this server's CUDA toolkit.
 - ⁶ The two additional Laya checkpoints use the same 500 English MMLU questions and A800 HTTP setup as ⁵. Their labels differed from the author's runtime on 7/500 (multilingual) and 2/500 (typed) questions. This tests serving on a shared English workload, not multilingual or typed-task quality.
+
+</details>
 
 </details>
 

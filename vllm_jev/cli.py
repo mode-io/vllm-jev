@@ -66,6 +66,9 @@ def main() -> None:
         default="auto",
         help="Checkpoint protocol (default: auto).",
     )
+    from .radixflow.launch import arguments as radixflow_arguments
+
+    radixflow_arguments(serve)
     arguments = sys.argv[1:]
     if sys.platform == "darwin":
         serve.add_argument("--host", default="127.0.0.1")
@@ -74,6 +77,12 @@ def main() -> None:
             "--help" if value.startswith("--help=") else value for value in arguments
         ]
     args, extra = parser.parse_known_args(arguments)
+    from .radixflow.launch import selected_policy
+
+    try:
+        args.radixflow_policy = selected_policy(args)
+    except ValueError as error:
+        parser.error(str(error))
     from .decision_template import ENVIRONMENT, current_template, load_template
 
     try:
@@ -85,6 +94,8 @@ def main() -> None:
     except (ValueError, OSError) as error:
         parser.error(str(error))
     if sys.platform == "darwin":
+        if args.radixflow_policy != "off":
+            parser.error("RadixFlow requires the native Linux vLLM backend")
         if extra:
             parser.error(f"unrecognized arguments: {' '.join(extra)}")
         if not 0 <= args.port <= 65535:
@@ -336,6 +347,14 @@ def main() -> None:
         or is_clef
     ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
+    from .radixflow.launch import configure as configure_radixflow
+
+    if args.radixflow_policy != "off":
+        defaults = [x for x in defaults if x != "--async-scheduling"]
+    try:
+        radixflow_flags = configure_radixflow(args, [*defaults, *extra], environment)
+    except ValueError as error:
+        parser.error(str(error))
     command = [
         sys.executable,
         "-m",
@@ -346,6 +365,7 @@ def main() -> None:
         "--served-model-name",
         model_id,
         *extra,
+        *radixflow_flags,
     ]
     for name in (
         "VLLM_JEV_HOME",
