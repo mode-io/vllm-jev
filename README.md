@@ -32,6 +32,8 @@ We found a scheduling gap: a matching prefix can still have hybrid state being p
 
 RadixFlow is **experimental and disabled by default**. Enable it with `--radixflow true` on [supported configurations](docs/radixflow.md#scope).
 
+We welcome bug reports, feedback, and discussions—please share your experience with RadixFlow!
+
 ### Video understanding: live comparison
 
 ![Valen answering 24 questions about an archery video: No vLLM Jev and vLLM Jev](docs/assets/valen-video-live.gif)
