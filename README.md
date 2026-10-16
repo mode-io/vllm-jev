@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-<h3 align="center">Fast structured decisions on Linux and Apple Silicon</h3>
+<h3 align="center">Fast structured decisions on Linux, Apple Silicon, and experimental Windows CPU</h3>
 
 <p align="center">
   <a href="docs/guide.md"><b>Documentation</b></a> ·
@@ -67,6 +67,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 
 - **Native vLLM serving on Linux:** scheduling, batching, compilation, KV cache, and metrics.
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
+- **Windows CPU (experimental):** twenty-four validated text/JSON checkpoints: the three Laya releases, Tiny-Jev and Tiny-Jev-1.7B, OpenJev-0.6B, Open-Jev-2B, Decider-0.8B/2B, Decider-4B Q4_K_M, JevK5-2B, JevK5-Lite, JevK5 4B/9B Q5_K_M, Kev-0.6B/0.8B, This-That 1.0/1.1/1.2, Mica-v0.1-4B Q5_K_M, Decision-0.8B Q8_0, Bruv1-0.8B FP32, Decision-4B Q4_K_M and RSI v1.0-0.8B FP32. See the [Windows guide](docs/guide.md#windows-cpu-experimental) and [Tiny 1.7B / JevK5 9B acceptance](docs/windows-tiny17-jev9.md) for isolated environments and limits.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
 - **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
 - **RadixFlow (experimental, opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
@@ -99,6 +100,21 @@ vllm-jev serve Valen-Team/Valen-Preview-0923
 
 The command downloads and prepares the model on first use. Send text or images to `/v1/systemone` for Choice, Noul, and Score decisions. For another Mac model, replace the model ID with a supported one from the table below.
 
+On native Windows x64, this branch includes an **experimental CPU backend for 24 validated text/JSON checkpoints**. Start with the [Windows onboarding guide](docs/project-onboarding.md), choose the model's isolated dependency profile, and install from this checkout. For example, after creating the legacy environment:
+
+```powershell
+.\.venv-windows-legacy\Scripts\vllm-jev.exe serve convaiinnovations/laya --cpu-threads 4
+```
+
+The same entrypoint serves Choice, Noul, and Score through `/v1/systemone`. Windows uses PyTorch CPU or the explicitly pinned GGUF runtime for each model. Keep the `windows-legacy`, `windows-modern`, `windows-bruv`, and `windows-rsi` environments separate; follow the [installation, per-model limits and validation procedures](docs/guide.md#windows-cpu-experimental). These results do not establish Windows vLLM, CUDA, image/video, RadixFlow, or arbitrary-checkpoint support, and do not imply a new PyPI release.
+
+The **24-model acceptance snapshot dated 2026-10-16** includes 22 earlier models passing fresh product regression (**36 CLI starts, 184 valid requests, 304 rejected inputs**) and Tiny-Jev-1.7B / JevK5-9B passing their separate original-author comparisons (**4 installed CLI starts, 28 valid requests, 60 rejected inputs**). Reference reuse, dependency preservation and lightweight-test evidence are distinguished in the [current regression scope](docs/guide.md#current-windows-regression-scope). GGUF acceptance covers only the listed quantizations; numerical parity is not a decision-accuracy benchmark.
+
+- [All 24 Windows checkpoints and environment mapping](docs/project-onboarding.md#validated-model-scope)
+- [Tiny-Jev-1.7B / JevK5-9B setup, memory guards and acceptance](docs/windows-tiny17-jev9.md)
+- [Decision / Bruv / RSI setup and historical acceptance](docs/windows-next-four.md)
+- [Windows adaptation retrospective and remaining risks](docs/project-retrospective.md)
+
 <details>
 <summary>GPU, port, and serving options</summary>
 
@@ -119,17 +135,18 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 ## Supported Models
 
-Choose a checkpoint for your platform and run its command. Linux uses native vLLM; Apple Silicon uses MLX, or PyTorch MPS for Laya.
+Choose a checkpoint for your platform and run its command. Linux uses native vLLM; Apple Silicon uses MLX, or PyTorch MPS for Laya. Windows uses experimental PyTorch CPU adapters or, for the explicitly listed GGUF releases, llama.cpp CPU. Check the [Windows guide](docs/guide.md#windows-cpu-experimental) for each model's isolated environment, exact artifact and validation status.
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
 | [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
-| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya` |
-| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-multilingual` |
-| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac | `vllm-jev serve lostargon/Tiny-Jev` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve lostargon/Tiny-Jev` |
+| [lostargon/Tiny-Jev-1.7B](https://huggingface.co/lostargon/Tiny-Jev-1.7B) | Text | Windows CPU FP32 (experimental) | `vllm-jev serve lostargon/Tiny-Jev-1.7B` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
@@ -153,18 +170,26 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 
 | Model | Tested platform | Start server |
 |---|---|---|
-| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux | `vllm-jev serve jaredpalmer/kev-0.8b` |
+| [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.6b` |
+| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux, Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.8b` |
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux | `vllm-jev serve jaredpalmer/kev-4b` |
-| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac | `vllm-jev serve Mapika/decider-0.8b` |
-| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux | `vllm-jev serve Mapika/decider-2b` |
-| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux | `vllm-jev serve sky7350/Mica-v0.1-4B` |
-| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux | `vllm-jev serve flock-io/this-that-model-1.0` |
-| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux | `vllm-jev serve flock-io/this-that-model-1.1` |
-| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
-| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux | `vllm-jev serve alibiserikbay/JevK5` |
-| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac | `vllm-jev serve alibiserikbay/JevK5-2B` |
+| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve Mapika/decider-0.8b` |
+| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux, Windows CPU (experimental) | `vllm-jev serve Mapika/decider-2b` |
+| [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) | Windows CPU Q4_K_M (experimental) | `vllm-jev serve Mapika/decider-4b-GGUF` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux; Windows CPU Q5_K_M (experimental) | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.0` |
+| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.1` |
+| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.2` |
+| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux; Windows CPU official Q5_K_M (experimental) | `vllm-jev serve alibiserikbay/JevK5` |
+| [alibiserikbay/JevK5-9B](https://huggingface.co/alibiserikbay/JevK5-9B) | Windows CPU official Q5_K_M (experimental) | `vllm-jev serve alibiserikbay/JevK5-9B` |
+| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac, Windows CPU (experimental) | `vllm-jev serve alibiserikbay/JevK5-2B` |
+| [alibiserikbay/JevK5-Lite](https://huggingface.co/alibiserikbay/JevK5-Lite) | Windows CPU only (experimental) | `vllm-jev serve alibiserikbay/JevK5-Lite` |
+| [evalengine/decision-0.8b-gguf](https://huggingface.co/evalengine/decision-0.8b-gguf) | Windows CPU Q8_0 (experimental) | `vllm-jev serve evalengine/decision-0.8b-gguf` |
+| [bvolpato/bruv1-0.8b](https://huggingface.co/bvolpato/bruv1-0.8b) | Windows CPU FP32 (experimental) | `vllm-jev serve bvolpato/bruv1-0.8b` |
+| [evalengine/decision-4b-gguf](https://huggingface.co/evalengine/decision-4b-gguf) | Windows CPU Q4_K_M (experimental) | `vllm-jev serve evalengine/decision-4b-gguf` |
+| [shgao/rsi-jev-v1.0-qwen3.5-0.8b](https://huggingface.co/shgao/rsi-jev-v1.0-qwen3.5-0.8b) | Windows CPU FP32 (experimental) | `vllm-jev serve shgao/rsi-jev-v1.0-qwen3.5-0.8b` |
 
-JevK5 currently supports **2–16 options** per question. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
+JevK5, JevK5-2B and the Windows JevK5-9B Q5_K_M adapter support **2–16 options** per question; the separate Windows Lite adapter accepts **2–255 Choice options** within its 512-token complete-input limit. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
 
 The optional CUDA setting `VLLM_JEV_BF16_MATMUL=no_splitk` can reduce batch-dependent numerical drift. Kev label changes can remain, including on A800. See [BF16 precision](docs/guide.md#cuda-bf16-matmul-precision) for usage and performance tradeoffs.
 

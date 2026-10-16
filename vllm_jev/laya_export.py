@@ -48,7 +48,7 @@ SOURCE_HASHES = {
         "83f6916d13ef0f556ac461f28308dc2bffa7ebeadee8ec9e2db5812020ea5bb4",
         "25061739243b617ad88d1219ba6f8a9c86c5881ca28df024fa2d9b3b2fcc30c6",
         "609d8f4c067cd3950f88594c5a802616cea245823836ef5848ee4fc40aab5b6f",
-        "6c6b2d8e3c84ce0e671c129cd6b374b235d6f9863042a5836358d00a89bbb5a1",
+        "424b69444bf7b5809dc2cd2e36d0bd71b8055124dd24274d6db3c655d38205e7",
     ),
     "convaiinnovations/laya-typed-decisions": (
         "5268d24ad3b77c8151de5dcb0762ba4391619aad9ab0bda33e36fb083cfeae6d",
@@ -69,8 +69,18 @@ def verify_source(source: Path, model_id: str) -> tuple[dict, dict]:
         "tokenizer/tokenizer.json",
         "tokenizer/tokenizer_config.json",
     )
-    if any(sha256(source / name) != expected for name, expected in zip(names, hashes)):
-        raise ValueError("Laya source files do not match the pinned release")
+    for name, expected in zip(names, hashes):
+        actual = sha256(source / name)
+        # Older Linux caches contain the exact SDK-normalized tokenizer config.
+        # The canonical pin above is the original Hugging Face release bytes.
+        legacy_tokenizer = (
+            model_id == "convaiinnovations/laya-multilingual"
+            and name == "tokenizer/tokenizer_config.json"
+            and actual
+            == "6c6b2d8e3c84ce0e671c129cd6b374b235d6f9863042a5836358d00a89bbb5a1"
+        )
+        if actual != expected and not legacy_tokenizer:
+            raise ValueError("Laya source files do not match the pinned release")
     tokenizer_files = {
         path.name for path in (source / "tokenizer").iterdir() if path.is_file()
     }

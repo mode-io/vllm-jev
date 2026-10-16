@@ -176,7 +176,7 @@ def load_template(value: str) -> DecisionTemplate:
     path = Path(value)
     if path.stat().st_size > MAX_BYTES:
         raise ValueError("decision-template JSON exceeds 64 KiB")
-    return decode_template(path.read_text())
+    return decode_template(path.read_text(encoding="utf-8"))
 
 
 def decode_template(text: str) -> DecisionTemplate:
