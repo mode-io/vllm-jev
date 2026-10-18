@@ -68,6 +68,15 @@ def verify(path: Path, *, full: bool = True) -> dict:
 
         return verify_jevany_pointer(path, full=full)
     if (path / "decision_manifest.json").is_file():
+        if (
+            json.loads((path / "decision_manifest.json").read_text()).get(
+                "prompt_protocol"
+            )
+            == "drex_pointer_v1"
+        ):
+            from .drex_export import verify_drex
+
+            return verify_drex(path, full=full)
         from .decision_export import verify_decision
 
         return verify_decision(path, full=full)

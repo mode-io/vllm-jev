@@ -88,6 +88,12 @@ class VllmJevAnyPointerQwen35ForTokenEmbedding(
     """Native dense Qwen3.5 image/text states for JevAny's Pointer head."""
 
 
+class VllmDrexQwen35MoeForTokenEmbedding(
+    as_embedding_model(Qwen3_5MoeForConditionalGeneration)
+):
+    """Native merged Drex MoE backbone; pointer head runs after pooling."""
+
+
 class VllmJevAnyPointerQwen35MoeForTokenEmbedding(
     as_embedding_model(Qwen3_5MoeForConditionalGeneration)
 ):

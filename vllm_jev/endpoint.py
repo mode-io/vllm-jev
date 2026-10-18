@@ -697,6 +697,12 @@ class JevEndpointPlugin:
         if decision_manifest.is_file():
             from .decision import DecisionService
 
+            if (
+                json.loads(decision_manifest.read_text()).get("prompt_protocol")
+                == "drex_pointer_v1"
+            ):
+                from .drex import DrexService as DecisionService
+
             state.vllm_decision_service = DecisionService(
                 engine_client,
                 Path(args.model),

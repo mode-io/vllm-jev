@@ -90,6 +90,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         "rsijev_xattn_v1",
         "clef_joint_v1",
         "jevany_pointer_v1",
+        "drex_pointer_v1",
         *DECISION_PROTOCOLS,
     ):
         raise ValueError(f"unknown protocol: {protocol}")
@@ -116,6 +117,21 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
 
 
 def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
+    from .drex_export import (
+        MODEL_ID as DREX_MODEL_ID,
+    )
+    from .drex_export import (
+        PROTOCOL as DREX_PROTOCOL,
+    )
+    from .drex_export import (
+        prepare_drex,
+    )
+
+    if model_id == DREX_MODEL_ID or protocol == DREX_PROTOCOL:
+        if sys.platform != "linux":
+            raise ValueError("Experimental Drex serving requires Linux and native vLLM")
+        return prepare_drex(model_id, workspace, protocol)
+
     from .jevany_export import MODELS as JEVANY_MODELS
 
     if model_id in JEVANY_MODELS:
