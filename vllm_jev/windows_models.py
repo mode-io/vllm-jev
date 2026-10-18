@@ -277,8 +277,10 @@ def load_agent(checkpoint: Path, model_id: str, threads: int | None = None):
         pass
 
     torch.set_num_threads(threads)
+    # Checkpoints can live on read-only stores. Let tempfile select writable
+    # storage (TEMP/TMP on Windows); cross-volume copies already have a fallback.
     runtime = tempfile.TemporaryDirectory(
-        prefix=".laya-cpu-", dir=checkpoint.parent, ignore_cleanup_errors=True
+        prefix=".laya-cpu-", ignore_cleanup_errors=True
     )
     try:
         destination = Path(runtime.name)
