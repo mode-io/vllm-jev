@@ -14,7 +14,6 @@ import torch
 import torch.nn.functional as F
 from safetensors.torch import load_file
 from transformers import AutoTokenizer
-from vllm import PoolingParams
 
 from .decision_protocols import jevk5_prompt, mica_prompt, packed_slots, task_prompt
 from .decision_template import current_template
@@ -520,6 +519,8 @@ class DecisionService:
         return torch.softmax(logits / temperature, -1).tolist()
 
     async def _encode(self, ids, salt, positions):
+        from vllm import PoolingParams
+
         request_id = f"decision-{uuid.uuid4().hex}"
         complete = False
         async with self.semaphore:

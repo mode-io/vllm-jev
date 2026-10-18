@@ -119,6 +119,8 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 ## Supported Models
 
+A separate [Drex v2.0 adapter prototype](docs/drex.md) is under development for Linux. Its tiny-model GPU path is exercised; the released 35B weights and long-context serving are not yet validated. It is not part of the accepted model list below.
+
 Choose a checkpoint for your platform and run its command. Linux uses native vLLM; Apple Silicon uses MLX, or PyTorch MPS for Laya.
 
 | Model | Input | Platform | Start server |

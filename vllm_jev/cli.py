@@ -57,6 +57,7 @@ def main() -> None:
             "clef_joint_v1",
             "jevany_pointer_v1",
             "kev_pointer_v1",
+            "drex_pointer_v1",
             "decider_slot_v1",
             "task_json_v1",
             "thisthat_slot_v1",
@@ -100,6 +101,15 @@ def main() -> None:
             parser.error(f"unrecognized arguments: {' '.join(extra)}")
         if not 0 <= args.port <= 65535:
             parser.error("port must be between 0 and 65535")
+    if args.model == "nace-ai/drex-v2.0" or args.protocol == "drex_pointer_v1":
+        from .drex_export import validate_template
+
+        try:
+            validate_template(template)
+        except ValueError as error:
+            parser.error(str(error))
+        if sys.platform != "linux":
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
     workspace = args.workspace.resolve()
     environment = os.environ.copy()
     environment.setdefault("HF_HOME", str(workspace / ".cache"))
@@ -116,6 +126,13 @@ def main() -> None:
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
         decision_manifest = checkpoint / "decision_manifest.json"
+        if (
+            sys.platform != "linux"
+            and decision_manifest.is_file()
+            and json.loads(decision_manifest.read_text()).get("prompt_protocol")
+            == "drex_pointer_v1"
+        ):
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
         valen_manifest = checkpoint / "valen_manifest.json"
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
@@ -279,6 +296,41 @@ def main() -> None:
     if is_decision:
         defaults[defaults.index("--convert") + 1] = "embed"
         defaults.extend(["--dtype", "bfloat16"])
+    if (
+        is_decision
+        and json.loads(decision_manifest.read_text()).get("prompt_protocol")
+        == "drex_pointer_v1"
+    ):
+        drex = json.loads(decision_manifest.read_text())
+        if args.radixflow_policy != "off":
+            parser.error(
+                "Drex prototype does not yet support prefix caching or RadixFlow"
+            )
+        if any(x.startswith("--enable-prefix-caching") for x in extra):
+            parser.error("Drex prototype requires prefix caching disabled")
+        if sys.platform != "linux":
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
+        from .drex_export import validate_template
+
+        try:
+            validate_template(template)
+        except ValueError as error:
+            parser.error(str(error))
+        defaults[defaults.index("--max-model-len") + 1] = str(
+            drex["default_max_length"] + 1
+        )
+        defaults[defaults.index("--convert") + 1] = "none"
+        defaults[defaults.index("--enable-prefix-caching")] = (
+            "--no-enable-prefix-caching"
+        )
+        defaults.extend(
+            [
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                '{"image":0,"video":0}',
+            ]
+        )
     if is_jevany_pointer:
         jevany_pointer = json.loads(jevany_pointer_manifest.read_text())
         defaults[defaults.index("--max-model-len") + 1] = str(
@@ -296,7 +348,9 @@ def main() -> None:
                 "--limit-mm-per-prompt",
                 json.dumps({"image": jevany_pointer["max_images"], "video": 0}),
                 "--mm-processor-kwargs",
-                json.dumps({"size": {"shortest_edge": 32 * 32, "longest_edge": 512 * 512}}),
+                json.dumps(
+                    {"size": {"shortest_edge": 32 * 32, "longest_edge": 512 * 512}}
+                ),
             ]
         )
     if is_rsijev:

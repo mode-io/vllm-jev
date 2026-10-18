@@ -32,6 +32,7 @@ def register() -> None:
     from vllm.model_executor.models import ModelRegistry
 
     for architecture in (
+        "VllmDrexQwen35MoeForTokenEmbedding",
         ARCHITECTURE,
         QWEN3_ARCHITECTURE,
         QWEN3_TOKEN_ARCHITECTURE,
