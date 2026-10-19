@@ -119,7 +119,7 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 ## Supported Models
 
-A separate [Drex v2.0 adapter prototype](docs/drex.md) is under development for Linux. Its tiny-model GPU path is exercised; the released 35B weights and long-context serving are not yet validated. It is not part of the accepted model list below.
+[Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
 
 Choose a checkpoint for your platform and run its command. Linux uses native vLLM; Apple Silicon uses MLX, or PyTorch MPS for Laya.
 
@@ -141,6 +141,7 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
+| [nace-ai/drex-v2.0](https://huggingface.co/nace-ai/drex-v2.0) (35B, experimental) | Text / JSON | Linux | `vllm-jev serve nace-ai/drex-v2.0 --workspace /data/models/drex --tensor-parallel-size 2 --max-model-len 8193` |
 
 <a id="rsi-jev-experimental"></a>
 <a id="clef-experimental"></a>
@@ -222,11 +223,20 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Updates
 
+### 2026-10-19
+
+- Added experimental [Drex v2.0](docs/drex.md) support through the standard `vllm-jev serve` CLI and `/v1/systemone` endpoint, addressing [issue #10](https://github.com/mode-io/vllm-jev/issues/10). Supports text/JSON Choice, Noul and Score with native causal rows and an FP32 pointer head.
+- Verified the official hash-pinned 35B BF16 release on two A800 GPUs, including concurrent requests, chunked prefill, disconnect recovery and invalid-input rejection. Prefix caching and RadixFlow remain disabled for Drex; this is functional validation, not a speed comparison.
+- Added release checksum checks, disk-space guards and explicit rejection of unsupported templates, media and bidirectional-state checkpoints. Model preparation ignores checkpoint Python files.
+
 ### 2026-10-14
 
 - Added the inline RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
 - Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
 - Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
+
+<details>
+<summary>Earlier updates</summary>
 
 ### 2026-10-13
 
@@ -235,9 +245,6 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 - Added Linux text/image serving for JevAny Pointer 4B and 27B, contributed by [heshien / AsirAsir02 (PR #9)](https://github.com/mode-io/vllm-jev/pull/9).
 - Fixed automatic model preparation and explicit protocol selection. JevAny supports all six `context_order` permutations while preserving its Pointer readouts; native remains the default.
 - Verified serving, image handling, prompt ordering and cancellation recovery with regression checks and real-model stress tests.
-
-<details>
-<summary>Earlier updates</summary>
 
 ### 2026-10-10
 

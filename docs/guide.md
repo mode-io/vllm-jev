@@ -61,10 +61,19 @@ Input support depends on the model:
 | [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
+| [nace-ai/drex-v2.0](https://huggingface.co/nace-ai/drex-v2.0) (35B, experimental) | Text / JSON | Linux | `vllm-jev serve nace-ai/drex-v2.0 --workspace /data/models/drex --tensor-parallel-size 2 --max-model-len 8193` |
 
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
 Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The [RSI-Jev](#rsi-jev) and [Clef](#clef) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
+
+### Drex v2.0 (experimental)
+
+Drex uses the same `vllm-jev serve` CLI and `/v1/systemone` API for text/JSON
+Choice, Noul and Score. The official 35B BF16 release has been exercised with
+TP=2 on two A800 80 GB GPUs. Use an explicit data-disk workspace. Native causal
+rows are required; media, non-native templates, prefix caching and RadixFlow
+are rejected. See the [Drex guide](drex.md) for setup and validation scope.
 
 ### Additional decision checkpoints (experimental)
 
