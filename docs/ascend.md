@@ -187,3 +187,14 @@ An additional 256-request mixed probe passed at 16-way client concurrency. It
 varied the state text and its length, used 2/3/4/8 choice candidates, and included
 Noul and Score in every request (14.27 s wall time, 0.975 s client p95).
 All measurements here are client/API timings, not isolated GPU-kernel time.
+
+### Sequence-budget sensitivity on OpenJev-0.6B
+
+A separate warmed sweep fixed `max_num_batched_tokens=8192` and varied the
+client concurrency at native sequence budgets 16 and 64. At budget 16 the
+best 256-request arm reached 23.75 req/s. At budget 64, the best short arm
+reached 76.68 req/s. A fresh-service 4,096-request check at budget 64 and
+32-way client concurrency completed without failure in 51.69 s: **79.24 API
+requests/s**, client p50 0.402 s and p95 0.477 s. Every request contains three
+typed questions (237.73 questions/s). These observed rates depend on the stated
+workload and budgets; they are not a hardware-theoretical limit or a CUDA comparison.

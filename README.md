@@ -236,6 +236,10 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
   [port/acceptance matrix](docs/ascend.md). OpenJev-0.6B passed 4,096 requests
   at 64-way client concurrency on 910B3, plus long-input and recovery checks;
   unvalidated cache-copy and RadixFlow combinations are rejected explicitly.
+- With a 64-sequence budget, OpenJev-0.6B completed a separate 4,096-request
+  run at **79.24 req/s** on 910B3 (32 clients, three typed questions/request).
+  See [Ascend measurements](docs/ascend.md#sequence-budget-sensitivity-on-openjev-06b)
+  for the workload and limits.
 - CUDA installs now use `.[cuda]` so NPU environments do not inherit a forced
   CUDA runtime dependency. Existing CUDA execution remains pinned to vLLM 0.29.0.
 
