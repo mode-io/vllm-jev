@@ -70,7 +70,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
 | Kev 0.8B | Verified merged adapter and CPU pointer head over native NPU pooling | Six warmed NPU arms passed; best25.82 req/s@32clients |
 | Decider 2B | Shared pure-text pooling and alias loading | Six warmed NPU arms passed; best15.64 req/s@32clients |
-| Other Kev, Task, ThisThat, Mica, JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
+| Other Task, ThisThat, Mica, JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
 | Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
@@ -220,6 +220,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Laya typed decisions | 16 | 16 | 10.26 | 1.849 | Best of six 256-request arms |
 | Decider-0.8B | 16 | 32 | 15.94 | 2.006 | Best of six 256-request arms |
 | Kev-0.8B | 16 | 32 | 25.82 | 1.509 | Best of six 256-request arms |
+| Kev-4B | 16 | 64 | 20.49 | 3.314 | Best of six 256-request arms |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
 | Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
 
