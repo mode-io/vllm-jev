@@ -67,7 +67,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | JevAny dense / MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
 | Drex 35B MoE | Existing verified merged export and causal pointer protocol | Pending; single 64 GB cannot hold its ~65.4 GiB BF16 weights |
 | Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
-| Kev / other Decider / Task / ThisThat / Mica / JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
+| Kev 0.8B | Verified merged adapter and CPU pointer head over native NPU pooling | Six warmed NPU arms passed; best25.82 req/s@32clients |
+| Other Kev/Decider, Task, ThisThat, Mica, JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
 | Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
@@ -216,6 +217,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Laya multilingual | 16 | 16 | 14.59 | 1.279 | Best of six 256-request arms |
 | Laya typed decisions | 16 | 16 | 10.26 | 1.849 | Best of six 256-request arms |
 | Decider-0.8B | 16 | 32 | 15.94 | 2.006 | Best of six 256-request arms |
+| Kev-0.8B | 16 | 32 | 25.82 | 1.509 | Best of six 256-request arms |
 
 All listed arms had zero failures and used the same three-question text API
 payload. The three Laya sweeps each completed all six concurrency settings
@@ -228,3 +230,10 @@ registering the standalone Qwen3.5 text pooling wrapper and mapping checkpoint
 weight aliases at load time. The mapper retains tensor values and the native
 loader still requires every parameter to be initialized. Earlier failed starts
 remain in the development audit; they are not included in throughput results.
+
+The common payload contains three logical questions and seven alternative
+candidate scores. Models may pack those alternatives differently; seven
+alternatives do not imply seven physical engine requests for every protocol.
+Throughput is reported at the typed API boundary, rather than inferred engine
+branches/s. Kev-0.8B completed all six arms with zero failed requests after
+source and foundation verification and a fresh, isolated service launch.
