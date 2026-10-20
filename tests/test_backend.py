@@ -93,15 +93,19 @@ def test_short_pooling_rows_keep_original_shape():
     "native,plugin,expected",
     [
         ("0.22.1", "0.22.1rc1", "vllm_jev.ascend_server"),
+        ("0.22.1+empty", "0.22.1rc1+local", "vllm_jev.ascend_server"),
         ("0.30.0", "0.30.0rc1", "vllm.entrypoints.cli.main"),
     ],
 )
 def test_runtime_pair_selection(monkeypatch, native, plugin, expected):
     import importlib.metadata
 
-    monkeypatch.setattr(
-        importlib.metadata, "version", lambda n: native if n == "vllm" else plugin
-    )
+    from vllm_jev import ascend_runtime
+
+    row = ascend_runtime.RUNTIMES[native.split("+", 1)[0]]
+    packages = {**row, "vllm": native, "vllm-ascend": plugin}
+    monkeypatch.setattr(importlib.metadata, "version", lambda n: packages[n])
+    monkeypatch.setattr(ascend_runtime, "cann_version", lambda: row["cann"])
     assert backend.server_module("ascend") == expected
 
 
@@ -158,11 +162,11 @@ def test_ascend_cli_forwards_platform_plugin_and_uses_legacy_bridge(
     monkeypatch.delenv("VLLM_JEV_LAYA_CUDA_GRAPH", raising=False)
     monkeypatch.delenv("VLLM_JEV_BF16_MATMUL", raising=False)
     monkeypatch.delenv("VLLM_JEV_ONLINE_PREFIX_CACHE", raising=False)
-    monkeypatch.setattr(
-        importlib.metadata,
-        "version",
-        lambda name: "0.22.1" if name == "vllm" else "0.22.1rc1",
-    )
+    from vllm_jev import ascend_runtime
+
+    packages = {**ascend_runtime.RUNTIMES["0.22.1"], "vllm": "0.22.1"}
+    monkeypatch.setattr(importlib.metadata, "version", lambda n: packages[n])
+    monkeypatch.setattr(ascend_runtime, "cann_version", lambda: "9.0.0")
     checkpoint = tmp_path / "export"
     checkpoint.mkdir()
     (checkpoint / "jev_manifest.json").write_text("{}")

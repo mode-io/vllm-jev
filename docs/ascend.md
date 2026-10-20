@@ -95,13 +95,19 @@ localhost SSH tunnel is currently available.
 
 ## Development validation record (2026-10-20)
 
-The local selection passes 193 tests, with 16 reference/runtime-dependent tests
+The local selection passes 220 tests, with 16 reference/runtime-dependent tests
 skipped. It includes device selection, CPU/NPU separation, Tiny-Jev projection
 against FP32 layer normalization, the legacy endpoint bridge lifecycle, CLI
 forwarding, and existing protocol/template/RadixFlow/precision regressions.
 Static checks, shell syntax and wheel/sdist construction pass. None of these
-results certifies native NPU model serving. The current CANNLab authenticated
-local SSH forward is unavailable, so native acceptance remains blocked.
+results certifies native NPU model serving. The authenticated SSH forward has been recovered. A real 910B3 run using the
+platform's original torch/torch-npu 2.7.1 pair passes 192 portable projection
+checks at 1/4/8 host threads against CPU FP32 layer normalization, with maximum
+absolute error 1.91e-5. A second isolated torch/torch-npu 2.10.0 run passes the
+same 192 checks, also with maximum absolute error 1.91e-5. These exercise the
+numerical path, not a trained model or
+native vLLM serving. A separate matched runtime is still being built from source
+because the host glibc is 2.31 and the available Ascend wheel requires 2.34.
 
 After each model is served on the matched NPU runtime, record an API probe:
 
@@ -114,3 +120,26 @@ python scripts/ascend_acceptance.py --url http://127.0.0.1:8795 \
 This script never downloads or starts a model. Preserve the launch command,
 weight digests, runtime/driver versions, NPU occupancy and reference-output
 checks alongside its results. A probe cannot identify the backend by itself.
+
+### Robustness fixes
+
+- The doctor and installer check the complete declared runtime row, including
+  TorchNPU, Transformers, Triton and selected CANN version. Package presence or
+  a matching vLLM version alone cannot mark the environment ready.
+- Local version suffixes such as `0.22.1+empty` are accepted for matching source
+  builds; incompatible base versions are still rejected.
+- Monitoring timeouts and smoke failures produce structured diagnostics. A
+  non-ready doctor returns a nonzero status.
+- API pressure validates required answer fields and types, finite normalized
+  probabilities, selected options and score ranges. Validation remains active
+  under Python `-O`; failures are counted and saved instead of losing the report.
+- The legacy endpoint bridge enforces a single API-server process before model
+  preparation. Native multi-process endpoint plugin support is a separate path.
+
+Source builds must include upstream Git submodules. The PyPI source archive did
+not include the Catlass dependency required by the NPU kernel build. The current
+trial uses upstream tag `v0.22.1rc1`, commit
+`5f6faa0cb8830f667266f3b8121cd1383606f2a1`, with its declared Catlass commit
+`41bf90da655bba3c66d0acd7e00abe33960ecfd6`. Source build artifacts, temporary homes
+and Git configuration are confined to the data-disk workspace. Compilation is
+not itself model acceptance.

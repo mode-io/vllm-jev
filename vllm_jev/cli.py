@@ -20,9 +20,17 @@ def main() -> None:
         and sys.argv[1] == "serve"
         and any(value.startswith("--help=") for value in sys.argv[2:])
     ):
+        # Extended vLLM help must not see this plugin's device-selection flag.
+        forwarded = []
+        arguments = iter(sys.argv[1:])
+        for value in arguments:
+            if value == "--backend":
+                next(arguments, None)
+            elif not value.startswith("--backend="):
+                forwarded.append(value)
         os.execvpe(
             sys.executable,
-            [sys.executable, "-m", "vllm.entrypoints.cli.main", *sys.argv[1:]],
+            [sys.executable, "-m", "vllm.entrypoints.cli.main", *forwarded],
             os.environ.copy(),
         )
     parser = argparse.ArgumentParser(prog="vllm-jev", allow_abbrev=False)
@@ -126,6 +134,10 @@ def main() -> None:
     try:
         backend = resolve_backend(args.backend)
         native_entrypoint = server_module(backend)
+        if native_entrypoint == "vllm_jev.ascend_server":
+            from .ascend_server import validate_api_count
+
+            validate_api_count(extra)
     except ValueError as error:
         parser.error(str(error))
     workspace = args.workspace.resolve()
@@ -436,6 +448,8 @@ def main() -> None:
         or is_clef
     ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
+    if native_entrypoint == "vllm_jev.ascend_server":
+        defaults.extend(["--api-server-count", "1"])
     if backend == "ascend":
         defaults = [x for x in defaults if x != "--async-scheduling"]
         defaults.extend(["--no-async-scheduling", "--enforce-eager"])

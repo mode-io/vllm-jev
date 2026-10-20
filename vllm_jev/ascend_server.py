@@ -40,11 +40,27 @@ class EngineView:
         return getattr(self._engine, name)
 
 
+def validate_api_count(arguments):
+    for i, value in enumerate(arguments):
+        if value == "--api-server-count":
+            if i + 1 >= len(arguments) or arguments[i + 1] != "1":
+                raise ValueError(
+                    "Legacy Ascend endpoint bridge requires one API-server process"
+                )
+        if value.startswith("--api-server-count=") and value != "--api-server-count=1":
+            raise ValueError(
+                "Legacy Ascend endpoint bridge requires one API-server process"
+            )
+
+
 def main():
     import importlib.metadata
 
-    if importlib.metadata.version("vllm") != "0.22.1":
+    if importlib.metadata.version("vllm").split("+", 1)[0] != "0.22.1":
         raise RuntimeError("Legacy Ascend endpoint bridge requires vLLM 0.22.1")
+    import sys
+
+    validate_api_count(sys.argv[1:])
     from vllm.entrypoints.openai import api_server
 
     from .endpoint import JevEndpointPlugin

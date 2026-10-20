@@ -72,11 +72,23 @@ def server_module(backend):
         raise ValueError(
             "Install a matched vLLM/Ascend stack; run vllm-jev doctor"
         ) from error
-    expected = {"0.22.1": "0.22.1rc1", "0.30.0": "0.30.0rc1"}
-    if expected.get(native) != plugin:
+    native = native.split("+", 1)[0]
+    plugin = plugin.split("+", 1)[0]
+    from .ascend_runtime import RUNTIMES, cann_version, runtime_issues
+
+    if RUNTIMES.get(native, {}).get("vllm-ascend") != plugin:
         raise ValueError(
             f"Uncovered Ascend version pair: vLLM {native}, vllm-ascend {plugin}"
         )
+    packages = {"vllm": native, "vllm-ascend": plugin}
+    for name in ("torch", "torch-npu", "transformers", "triton-ascend"):
+        try:
+            packages[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            packages[name] = None
+    issues = runtime_issues(packages, cann_version())
+    if issues:
+        raise ValueError("Ascend runtime mismatch: " + "; ".join(issues))
     return (
         "vllm_jev.ascend_server" if native == "0.22.1" else "vllm.entrypoints.cli.main"
     )

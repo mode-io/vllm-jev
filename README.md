@@ -189,7 +189,7 @@ curl -sS http://127.0.0.1:8795/v1/systemone \
 
 The response contains `answers.intent.choice` and `answers.intent.probabilities` for the supplied labels.
 
-See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The plugin targets **vLLM 0.29.0** and **Python 3.12+**.
+See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The CUDA path targets **vLLM 0.29.0 / Python 3.12+**. The internal [Ascend development port](docs/ascend.md) has separate runtime requirements.
 
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
