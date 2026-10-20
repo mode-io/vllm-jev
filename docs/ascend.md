@@ -58,7 +58,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8, 1024/32 and 4096/64 client-concurrency requests passed; see record below |
 | Open-Jev 2B/9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
 | Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
-| Laya / multilingual / typed decisions | Portable head placement; same protocol/compiler; eager head instead of CUDA Graph | Pending |
+| Laya English | Portable head placement; eager head instead of CUDA Graph | Six warmed NPU sweep arms passed (256 requests each); best10.40 req/s at16 clients, nativeS16 |
+| Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Pending separate NPU sweeps |
 | Valen | CPU-safe weight preparation; native token pooling and existing head | Pending |
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
 | RSI-Jev text / VL | Device-aware FP32 cross-attention head | Pending |
@@ -198,3 +199,9 @@ reached 76.68 req/s. A fresh-service 4,096-request check at budget 64 and
 requests/s**, client p50 0.402 s and p95 0.477 s. Every request contains three
 typed questions (237.73 questions/s). These observed rates depend on the stated
 workload and budgets; they are not a hardware-theoretical limit or a CUDA comparison.
+
+Laya English also completed the six-arm warmed concurrency sweep with no failed
+requests. At native sequence budget16 its highest observed throughput was
+10.40 API requests/s at16 clients (256 requests, p50 1.521 s, p95 1.712 s).
+The API payload was the same as OpenJev; architecture-specific tokenization and
+head execution still differ. This is a short sweep result, not a sustained check.
