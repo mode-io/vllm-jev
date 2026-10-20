@@ -472,7 +472,9 @@ class ClefService:
             token("<|vision_start|>"),
             token("<|vision_end|>"),
         )
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from .backend import readout_device
+
+        self.device = readout_device()
         config = json.loads((model_path / "joint_head_config.json").read_text())
         self.head = ClefHead(**config)
         self.head.load_state_dict(

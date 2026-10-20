@@ -85,7 +85,9 @@ class LayaService:
         self.head.load_state_dict(
             load_file(str(checkpoint / "laya_head.safetensors")), strict=True
         )
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from .backend import readout_device
+
+        self.device = readout_device()
         self.head.to(self.device).eval()
         self.graph_head = None
         if (

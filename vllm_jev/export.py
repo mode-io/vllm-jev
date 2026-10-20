@@ -4,7 +4,6 @@ import argparse
 import json
 import math
 import os
-import sys
 from pathlib import Path
 
 import torch
@@ -29,7 +28,9 @@ def export(base: Path, adapter: Path, head_path: Path, output: Path) -> dict:
     config = AutoConfig.from_pretrained(base, local_files_only=True).get_text_config()
     if config.hidden_size <= 0:
         raise ValueError("invalid text backbone hidden size")
-    device = "cpu" if sys.platform == "darwin" else "cuda:0"
+    from .backend import export_device
+
+    device = export_device()
     if config.model_type == "qwen3_5_text":
         architecture, prompt_protocol = ARCHITECTURE, "open_jev_choice"
         model = Qwen3_5ForCausalLM.from_pretrained(

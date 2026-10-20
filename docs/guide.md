@@ -9,10 +9,10 @@ On Linux with an NVIDIA GPU, [install uv](https://docs.astral.sh/uv/getting-star
 ```bash
 uv venv --python 3.12 .venv
 source .venv/bin/activate
-uv pip install .
+uv pip install '.[cuda]'
 ```
 
-For development, use `uv pip install -e .` to install from your working tree.
+For development, use `uv pip install -e '.[cuda]'` to install from your working tree.
 
 On Apple Silicon with macOS 15 or newer, run the setup script from the repository directory. Sourcing it leaves the Python 3.12 environment active:
 
@@ -567,3 +567,9 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 - Improved model validation and request handling.
 
 See the [demos](../README.md#demos) and [performance results](../README.md#inference-performance).
+
+## Ascend development port
+
+See [Ascend setup and acceptance matrix](ascend.md). Existing model listings
+above do not imply NPU validation. Use a matched native Ascend runtime and
+`--backend ascend`; CUDA-specific graph/cache hooks are not silently reused.

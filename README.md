@@ -77,7 +77,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 On Linux with an NVIDIA GPU, install vLLM Jev with [`uv`](https://docs.astral.sh/uv/) from the repository directory:
 
 ```bash
-uv pip install .
+uv pip install '.[cuda]'
 ```
 
 For development, use an [editable installation](docs/guide.md#installation).
@@ -118,6 +118,10 @@ Visit our [documentation](docs/guide.md) to learn more.
 - [List of Supported Models](docs/guide.md#supported-models)
 
 ## Supported Models
+
+An [Ascend development port](docs/ascend.md) is being prepared on the internal
+0.4 branch. The model table below describes existing CUDA/macOS support; it is
+not an NPU compatibility table. NPU model acceptance remains pending.
 
 [Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
 
@@ -223,20 +227,30 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Updates
 
+### 2026-10-20 (internal development)
+
+- Started the Ascend 0.4 port: shared backend selection, portable readout placement,
+  a non-CUDA Tiny-Jev projection and a vLLM 0.22.1 endpoint compatibility bridge.
+- Added `vllm-jev doctor`, an isolated-runtime install helper and a complete
+  [port/acceptance matrix](docs/ascend.md). Model-level NPU tests are pending;
+  unvalidated cache-copy and RadixFlow combinations are rejected explicitly.
+- CUDA installs now use `.[cuda]` so NPU environments do not inherit a forced
+  CUDA runtime dependency. Existing CUDA execution remains pinned to vLLM 0.29.0.
+
 ### 2026-10-19
 
 - Added experimental [Drex v2.0](docs/drex.md) support through the standard `vllm-jev serve` CLI and `/v1/systemone` endpoint, addressing [issue #10](https://github.com/mode-io/vllm-jev/issues/10). Supports text/JSON Choice, Noul and Score with native causal rows and an FP32 pointer head.
 - Verified the official hash-pinned 35B BF16 release on two A800 GPUs, including concurrent requests, chunked prefill, disconnect recovery and invalid-input rejection. Prefix caching and RadixFlow remain disabled for Drex; this is functional validation, not a speed comparison.
 - Added release checksum checks, disk-space guards and explicit rejection of unsupported templates, media and bidirectional-state checkpoints. Model preparation ignores checkpoint Python files.
 
+<details>
+<summary>Earlier updates</summary>
+
 ### 2026-10-14
 
 - Added the inline RadixFlow explainer video and the story behind its cache-to-scheduling investigation. RadixFlow is explicitly experimental and disabled by default.
 - Added `--radixflow true|false` with `--radixflow` / `--no-radixflow` aliases, shared by Jev and ordinary generative-model serving. Existing policy flags remain compatible.
 - Added reusable Rust-library configuration through `VLLM_JEV_RADIXFLOW_LIBRARY`. The integration is model-independent within supported native prefix-cache configurations; incompatible cache/scheduler settings are rejected explicitly. [Usage](docs/radixflow.md#build-and-enable).
-
-<details>
-<summary>Earlier updates</summary>
 
 ### 2026-10-13
 

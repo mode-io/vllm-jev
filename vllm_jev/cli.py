@@ -9,6 +9,11 @@ from pathlib import Path
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        from .doctor import main as doctor_main
+
+        doctor_main(sys.argv[2:])
+        return
     if (
         sys.platform != "darwin"
         and len(sys.argv) > 1
@@ -31,6 +36,12 @@ def main() -> None:
             if sys.platform == "darwin"
             else "Additional arguments are forwarded to vllm serve."
         ),
+    )
+    serve.add_argument(
+        "--backend",
+        choices=("auto", "cuda", "ascend"),
+        default=None,
+        help="Native device backend; auto detects exposed Ascend devices.",
     )
     serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
@@ -110,8 +121,32 @@ def main() -> None:
             parser.error(str(error))
         if sys.platform != "linux":
             parser.error("Experimental Drex serving requires Linux and native vLLM")
+    from .backend import BACKEND_ENV, resolve_backend, server_module
+
+    try:
+        backend = resolve_backend(args.backend)
+        native_entrypoint = server_module(backend)
+    except ValueError as error:
+        parser.error(str(error))
     workspace = args.workspace.resolve()
     environment = os.environ.copy()
+    environment[BACKEND_ENV] = backend
+    if backend == "ascend":
+        if args.radixflow_policy != "off":
+            parser.error(
+                "RadixFlow's NPU state-copy adapter is not yet validated; disable RadixFlow"
+            )
+        if environment.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":
+            parser.error("Online checkpoint creation is not yet validated on Ascend")
+        if environment.get("VLLM_JEV_LAYA_CUDA_GRAPH") == "1":
+            parser.error(
+                "Laya CUDA Graph cannot run on Ascend; unset VLLM_JEV_LAYA_CUDA_GRAPH"
+            )
+        if environment.get("VLLM_JEV_BF16_MATMUL", "default") != "default":
+            parser.error("CUDA BF16 matmul overrides cannot run on Ascend")
+        plugins_env = list(filter(None, environment.get("VLLM_PLUGINS", "").split(",")))
+        environment["VLLM_PLUGINS"] = ",".join(dict.fromkeys([*plugins_env, "ascend"]))
+
     environment.setdefault("HF_HOME", str(workspace / ".cache"))
     environment.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
     plugins = ["vllm_jev_model", "vllm_jev_endpoint"]
@@ -401,6 +436,9 @@ def main() -> None:
         or is_clef
     ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
+    if backend == "ascend":
+        defaults = [x for x in defaults if x != "--async-scheduling"]
+        defaults.extend(["--no-async-scheduling", "--enforce-eager"])
     from .radixflow.launch import configure as configure_radixflow
 
     if args.radixflow_policy != "off":
@@ -412,7 +450,7 @@ def main() -> None:
     command = [
         sys.executable,
         "-m",
-        "vllm.entrypoints.cli.main",
+        native_entrypoint,
         "serve",
         str(checkpoint),
         *defaults,

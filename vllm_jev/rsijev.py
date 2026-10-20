@@ -505,9 +505,9 @@ class RsiJevService:
             model_path, local_files_only=True
         )
         self.image_pad_id = model_config["image_token_id"]
-        device = os.environ.get("VLLM_JEV_RSIJEV_DEVICE") or (
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        from .backend import readout_device
+
+        device = readout_device(os.environ.get("VLLM_JEV_RSIJEV_DEVICE"))
         self.head = RsiJevHead(hidden, self.config)
         calibration = model_path / "rsijev_calibration.safetensors"
         self.head.load(
