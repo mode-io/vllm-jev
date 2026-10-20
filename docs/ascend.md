@@ -223,7 +223,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Kev-4B | 16 | 64 | 20.49 | 3.314 | Best of six 256-request arms |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
 | Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
-| Open-Jev-9B | 64 | 64 | 20.47 | 3.068 | Best of six 256-request arms |
+| Open-Jev-9B | 64 | 32 | 21.07 | 1.526 | Fresh service, 4096 requests; zero failures |
 
 All listed arms had zero failures and used the same three-question text API
 payload. The three Laya sweeps each completed all six concurrency settings
