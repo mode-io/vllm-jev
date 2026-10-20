@@ -56,7 +56,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Family / feature | Engineering changes | NPU acceptance |
 |---|---|---|
 | OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8, 1024/32 and 4096/64 client-concurrency requests passed; see record below |
-| Open-Jev 2B/9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
+| Open-Jev 2B | Shared device selection; CPU-safe HF/PEFT preparation; native scalar pooling | S16/S64 NPU sweeps passed; best43.69 req/s atS64,64clients |
+| Open-Jev 9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
 | Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
 | Laya English | Portable head placement; eager head instead of CUDA Graph | Six warmed NPU sweep arms passed (256 requests each); best10.40 req/s at16 clients, nativeS16 |
 | Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Both six-arm NPU sweeps passed; measured rates below |
@@ -220,6 +221,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Decider-0.8B | 16 | 32 | 15.94 | 2.006 | Best of six 256-request arms |
 | Kev-0.8B | 16 | 32 | 25.82 | 1.509 | Best of six 256-request arms |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
+| Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
 
 All listed arms had zero failures and used the same three-question text API
 payload. The three Laya sweeps each completed all six concurrency settings
@@ -239,3 +241,8 @@ alternatives do not imply seven physical engine requests for every protocol.
 Throughput is reported at the typed API boundary, rather than inferred engine
 branches/s. Kev-0.8B completed all six arms with zero failed requests after
 source and foundation verification and a fresh, isolated service launch.
+
+Open-Jev-2B completed six warmed arms at each sequence budget16 and64, with
+zero failures. The highest observed short-arm throughput increased from
+13.40 req/s at budget16 to43.69 req/s at budget64. Its pinned foundation is
+retained separately for exact-version reuse by subsequent adapters.
