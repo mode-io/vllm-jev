@@ -451,6 +451,15 @@ def main() -> None:
     if native_entrypoint == "vllm_jev.ascend_server":
         defaults.extend(["--api-server-count", "1"])
     if backend == "ascend":
+        # Ascend 0.22's align path unconditionally accesses recurrent-state
+        # hooks. Pure attention backbones must retain the native cache mode.
+        config_path = checkpoint / "config.json"
+        config = json.loads(config_path.read_text()) if config_path.is_file() else {}
+        if config.get("model_type") in {"qwen3", "qwen3_vl", "qwen3_vl_moe", "modernbert"}:
+            for flag in ("--mamba-cache-mode", "--mamba-ssm-cache-dtype"):
+                if flag in defaults:
+                    index = defaults.index(flag)
+                    del defaults[index : index + 2]
         defaults = [x for x in defaults if x != "--async-scheduling"]
         defaults.extend(["--no-async-scheduling", "--enforce-eager"])
     from .radixflow.launch import configure as configure_radixflow

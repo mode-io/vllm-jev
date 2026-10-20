@@ -35,6 +35,8 @@ Once a matching runtime and the ordinary Jev dependencies are present:
 ```bash
 source /home/developer/Ascend/ascend-toolkit/set_env.sh
 export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:${LD_LIBRARY_PATH:-}
+# Load NNAL ATB too, using the ABI of the matched Torch runtime.
+source /home/developer/Ascend/nnal/atb/set_env.sh --cxx_abi=1
 bash scripts/install_ascend.sh /mnt/workspace/jev /path/to/runtime/bin/python
 vllm-jev doctor --smoke
 vllm-jev serve IamBusy/OpenJev-0.6B --backend ascend \
@@ -143,3 +145,11 @@ trial uses upstream tag `v0.22.1rc1`, commit
 `41bf90da655bba3c66d0acd7e00abe33960ecfd6`. Source build artifacts, temporary homes
 and Git configuration are confined to the data-disk workspace. Compilation is
 not itself model acceptance.
+
+The CANNLab source build loaded the trained OpenJev-0.6B weights on 910B3.
+The first request exposed a pure-attention cache-mode incompatibility: Ascend
+0.22 enters recurrent-state copying whenever `mamba_cache_mode=align`. The
+launcher now omits recurrent cache defaults for known full-attention backbones;
+hybrid backbones retain them. End-to-end acceptance of this repair is pending.
+The private runtime also records unresolved OpenCV/NumPy and optional CANN
+profiler dependency declarations; a successful import is not a clean dependency audit.

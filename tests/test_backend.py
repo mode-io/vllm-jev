@@ -150,8 +150,9 @@ def test_legacy_bridge_preserves_engine_lifecycle_and_attaches_once():
     assert EngineView(engine).encode == "encoder"
 
 
+@pytest.mark.parametrize("model_type", ["qwen3", "qwen3_5"])
 def test_ascend_cli_forwards_platform_plugin_and_uses_legacy_bridge(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, model_type
 ):
     import importlib.metadata
 
@@ -170,6 +171,7 @@ def test_ascend_cli_forwards_platform_plugin_and_uses_legacy_bridge(
     checkpoint = tmp_path / "export"
     checkpoint.mkdir()
     (checkpoint / "jev_manifest.json").write_text("{}")
+    (checkpoint / "config.json").write_text('{"model_type":"' + model_type + '"}')
     monkeypatch.setattr(
         cli.sys, "argv", ["vllm-jev", "serve", str(checkpoint), "--backend", "ascend"]
     )
@@ -188,6 +190,8 @@ def test_ascend_cli_forwards_platform_plugin_and_uses_legacy_bridge(
     assert "--async-scheduling" not in captured["command"]
     assert "--no-async-scheduling" in captured["command"]
     assert "--enforce-eager" in captured["command"]
+    assert ("--mamba-cache-mode" in captured["command"]) == (model_type == "qwen3_5")
+    assert ("--mamba-ssm-cache-dtype" in captured["command"]) == (model_type == "qwen3_5")
     assert "ascend" in captured["environment"]["VLLM_PLUGINS"].split(",")
     assert captured["environment"]["VLLM_JEV_BACKEND"] == "ascend"
 
