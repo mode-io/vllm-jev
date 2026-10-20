@@ -66,7 +66,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
 | JevAny dense / MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
 | Drex 35B MoE | Existing verified merged export and causal pointer protocol | Pending; single 64 GB cannot hold its ~65.4 GiB BF16 weights |
-| Kev / Decider / Task / ThisThat / Mica / JevK5 | Existing decision compilers and CPU heads over native pooling | Pending |
+| Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
+| Kev / other Decider / Task / ThisThat / Mica / JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
 | Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
@@ -99,7 +100,7 @@ localhost SSH tunnel is currently available.
 
 ## Development validation record (2026-10-20–21)
 
-The local selection passes 222 tests, with 16 reference/runtime-dependent tests
+The local selection passes 229 tests, with 16 reference/runtime-dependent tests
 skipped. It includes device selection, CPU/NPU separation, Tiny-Jev projection
 against FP32 layer normalization, the legacy endpoint bridge lifecycle, CLI
 forwarding, and existing protocol/template/RadixFlow/precision regressions.
@@ -214,9 +215,16 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Laya English | 16 | 16 | 10.40 | 1.712 | Best of six 256-request arms |
 | Laya multilingual | 16 | 16 | 14.59 | 1.279 | Best of six 256-request arms |
 | Laya typed decisions | 16 | 16 | 10.26 | 1.849 | Best of six 256-request arms |
+| Decider-0.8B | 16 | 32 | 15.94 | 2.006 | Best of six 256-request arms |
 
 All listed arms had zero failures and used the same three-question text API
 payload. The three Laya sweeps each completed all six concurrency settings
 (1/4/8/16/32/64). Budgets and measurement lengths differ as shown; these rows
 report tested configurations, not a controlled ranking of architectures.
 Remaining families keep their pending status until their own NPU tests pass.
+
+Decider-0.8B completed all six concurrency arms with zero failed requests after
+registering the standalone Qwen3.5 text pooling wrapper and mapping checkpoint
+weight aliases at load time. The mapper retains tensor values and the native
+loader still requires every parameter to be initialized. Earlier failed starts
+remain in the development audit; they are not included in throughput results.
