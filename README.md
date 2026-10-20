@@ -121,8 +121,9 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 An [Ascend development port](docs/ascend.md) is being prepared on the internal
 0.4 branch. The model table below describes existing CUDA/macOS support; it is
-not an NPU compatibility table. OpenJev-0.6B has passed initial real-910B3
-functional pressure and edge tests; other model families remain pending.
+not an NPU compatibility table. OpenJev-0.6B has passed real-910B3
+functional pressure and edge tests. All three Laya variants passed warmed
+NPU concurrency sweeps; other model families remain pending.
 
 [Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
 

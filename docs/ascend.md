@@ -59,7 +59,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Open-Jev 2B/9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
 | Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
 | Laya English | Portable head placement; eager head instead of CUDA Graph | Six warmed NPU sweep arms passed (256 requests each); best10.40 req/s at16 clients, nativeS16 |
-| Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Pending separate NPU sweeps |
+| Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Both six-arm NPU sweeps passed; measured rates below |
 | Valen | CPU-safe weight preparation; native token pooling and existing head | Pending |
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
 | RSI-Jev text / VL | Device-aware FP32 cross-attention head | Pending |
@@ -97,9 +97,9 @@ logs and temporary files. SSH may require the platform IDE's local forwarding
 helper to stay running. A working cloud environment does not guarantee that its
 localhost SSH tunnel is currently available.
 
-## Development validation record (2026-10-20)
+## Development validation record (2026-10-20–21)
 
-The local selection passes 221 tests, with 16 reference/runtime-dependent tests
+The local selection passes 222 tests, with 16 reference/runtime-dependent tests
 skipped. It includes device selection, CPU/NPU separation, Tiny-Jev projection
 against FP32 layer normalization, the legacy endpoint bridge lifecycle, CLI
 forwarding, and existing protocol/template/RadixFlow/precision regressions.
@@ -205,3 +205,18 @@ requests. At native sequence budget16 its highest observed throughput was
 10.40 API requests/s at16 clients (256 requests, p50 1.521 s, p95 1.712 s).
 The API payload was the same as OpenJev; architecture-specific tokenization and
 head execution still differ. This is a short sweep result, not a sustained check.
+
+### Measured text API throughput by model
+
+| Model | Native sequence budget | Client concurrency | Observed req/s | Client p95 (s) | Measurement |
+|---|---:|---:|---:|---:|---|
+| OpenJev-0.6B | 64 | 32 | 79.24 | 0.477 | 4096-request check |
+| Laya English | 16 | 16 | 10.40 | 1.712 | Best of six 256-request arms |
+| Laya multilingual | 16 | 16 | 14.59 | 1.279 | Best of six 256-request arms |
+| Laya typed decisions | 16 | 16 | 10.26 | 1.849 | Best of six 256-request arms |
+
+All listed arms had zero failures and used the same three-question text API
+payload. The three Laya sweeps each completed all six concurrency settings
+(1/4/8/16/32/64). Budgets and measurement lengths differ as shown; these rows
+report tested configurations, not a controlled ranking of architectures.
+Remaining families keep their pending status until their own NPU tests pass.
