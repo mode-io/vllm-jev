@@ -55,7 +55,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 
 | Family / feature | Engineering changes | NPU acceptance |
 |---|---|---|
-| Open-Jev 2B/9B; OpenJev 0.6B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
+| OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8-concurrency and 1024/32-concurrency requests passed; see record below |
+| Open-Jev 2B/9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
 | Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
 | Laya / multilingual / typed decisions | Portable head placement; same protocol/compiler; eager head instead of CUDA Graph | Pending |
 | Valen | CPU-safe weight preparation; native token pooling and existing head | Pending |
@@ -65,7 +66,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | JevAny dense / MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
 | Drex 35B MoE | Existing verified merged export and causal pointer protocol | Pending; single 64 GB cannot hold its ~65.4 GiB BF16 weights |
 | Kev / Decider / Task / ThisThat / Mica / JevK5 | Existing decision compilers and CPU heads over native pooling | Pending |
-| Choice / Noul / Score, templates | Shared endpoint and compilers retained | CPU regressions only |
+| Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
 | Rust index / flex / state-ready / fragmentation | Host algorithms retained | NPU scheduler/state-copy adapter pending; launch explicitly rejected |
@@ -108,8 +109,8 @@ checks at 1/4/8 host threads against CPU FP32 layer normalization, with maximum
 absolute error 1.91e-5. A second isolated torch/torch-npu 2.10.0 run passes the
 same 192 checks, also with maximum absolute error 1.91e-5. These exercise the
 numerical path, not a trained model or
-native vLLM serving. A separate matched runtime is still being built from source
-because the host glibc is 2.31 and the available Ascend wheel requires 2.34.
+native vLLM serving. The matched runtime was built from source because the host glibc is 2.31
+and the available Ascend wheel requires 2.34.
 
 After each model is served on the matched NPU runtime, record an API probe:
 
@@ -150,6 +151,28 @@ The CANNLab source build loaded the trained OpenJev-0.6B weights on 910B3.
 The first request exposed a pure-attention cache-mode incompatibility: Ascend
 0.22 enters recurrent-state copying whenever `mamba_cache_mode=align`. The
 launcher now omits recurrent cache defaults for known full-attention backbones;
-hybrid backbones retain them. End-to-end acceptance of this repair is pending.
+hybrid backbones retain them. The repaired launcher passed the functional acceptance below.
 The private runtime also records unresolved OpenCV/NumPy and optional CANN
 profiler dependency declarations; a successful import is not a clean dependency audit.
+
+### Trained OpenJev-0.6B functional acceptance
+
+Native vLLM 0.22.1 + vllm-ascend 0.22.1rc1 loaded the BF16 merged
+OpenJev-0.6B checkpoint on the allocated 910B3. RadixFlow was off. Tests used
+loopback HTTP, eager synchronous execution, `max_model_len=1024`, 16 sequences
+and 50% device-memory utilization. The fixed adapter revision was
+`b4bf78e7c053407b5d54a71bcc682ef5bbe59e72`; its Qwen3-0.6B foundation was
+`c1899de289a04d12100db370d81485cdf75e47ca`.
+
+| Requests | Client concurrency | Successful | Failed | Wall time (s) |
+|---:|---:|---:|---:|---:|
+| 128 | 8 | 128 | 0 | 8.75 |
+| 1024 | 32 | 1024 | 0 | 42.77 |
+
+Each request checks Choice, Noul and Score answer IDs, types and finite,
+normalized probabilities. A separate edge probe passed 16 long-input requests,
+four invalid-input rejections, and 16 subsequent requests after eight clients
+sent a request and closed the connection without reading the response. This
+checks recovery, not proof that every disconnected request was aborted before
+execution. These are functional results for one family, not a hardware speedup
+comparison or acceptance of every listed model.
