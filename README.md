@@ -121,7 +121,8 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 An [Ascend development port](docs/ascend.md) is being prepared on the internal
 0.4 branch. The model table below describes existing CUDA/macOS support; it is
-not an NPU compatibility table. NPU model acceptance remains pending.
+not an NPU compatibility table. OpenJev-0.6B has passed initial real-910B3
+functional pressure and edge tests; other model families remain pending.
 
 [Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
 
@@ -232,7 +233,8 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 - Started the Ascend 0.4 port: shared backend selection, portable readout placement,
   a non-CUDA Tiny-Jev projection and a vLLM 0.22.1 endpoint compatibility bridge.
 - Added `vllm-jev doctor`, an isolated-runtime install helper and a complete
-  [port/acceptance matrix](docs/ascend.md). Model-level NPU tests are pending;
+  [port/acceptance matrix](docs/ascend.md). OpenJev-0.6B passed 4,096 requests
+  at 64-way client concurrency on 910B3, plus long-input and recovery checks;
   unvalidated cache-copy and RadixFlow combinations are rejected explicitly.
 - CUDA installs now use `.[cuda]` so NPU environments do not inherit a forced
   CUDA runtime dependency. Existing CUDA execution remains pinned to vLLM 0.29.0.

@@ -55,7 +55,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 
 | Family / feature | Engineering changes | NPU acceptance |
 |---|---|---|
-| OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8-concurrency and 1024/32-concurrency requests passed; see record below |
+| OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8, 1024/32 and 4096/64 client-concurrency requests passed; see record below |
 | Open-Jev 2B/9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
 | Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
 | Laya / multilingual / typed decisions | Portable head placement; same protocol/compiler; eager head instead of CUDA Graph | Pending |
@@ -98,7 +98,7 @@ localhost SSH tunnel is currently available.
 
 ## Development validation record (2026-10-20)
 
-The local selection passes 220 tests, with 16 reference/runtime-dependent tests
+The local selection passes 221 tests, with 16 reference/runtime-dependent tests
 skipped. It includes device selection, CPU/NPU separation, Tiny-Jev projection
 against FP32 layer normalization, the legacy endpoint bridge lifecycle, CLI
 forwarding, and existing protocol/template/RadixFlow/precision regressions.
@@ -168,6 +168,7 @@ and 50% device-memory utilization. The fixed adapter revision was
 |---:|---:|---:|---:|---:|
 | 128 | 8 | 128 | 0 | 8.75 |
 | 1024 | 32 | 1024 | 0 | 42.77 |
+| 4096 | 64 | 4096 | 0 | 168.78 |
 
 Each request checks Choice, Noul and Score answer IDs, types and finite,
 normalized probabilities. A separate edge probe passed 16 long-input requests,
@@ -176,3 +177,13 @@ sent a request and closed the connection without reading the response. This
 checks recovery, not proof that every disconnected request was aborted before
 execution. These are functional results for one family, not a hardware speedup
 comparison or acceptance of every listed model.
+
+A small BF16 numerical audit compared the original HF+PEFT CPU model against
+native NPU scoring on four prompts (ten candidate branches). Top-1 choices
+agreed on all four. The mean absolute score difference was 0.183 and the maximum
+was 0.496; this is not bitwise equivalence or a downstream accuracy evaluation.
+
+An additional 256-request mixed probe passed at 16-way client concurrency. It
+varied the state text and its length, used 2/3/4/8 choice candidates, and included
+Noul and Score in every request (14.27 s wall time, 0.975 s client p95).
+All measurements here are client/API timings, not isolated GPU-kernel time.
