@@ -52,6 +52,10 @@ class VllmJevQwen35ForSequenceClassification(as_seq_cls_model(JevQwen35CausalLM)
     """
 
 
+class VllmJevQwen35TextForTokenEmbedding(as_embedding_model(JevQwen35CausalLM)):
+    """Pure text Qwen3.5 token pooling with native hybrid state hooks."""
+
+
 class VllmJevQwen3ForSequenceClassification(as_seq_cls_model(Qwen3ForCausalLM)):
     """Native Qwen3 pooling backbone with a merged scalar decision head."""
 

@@ -268,11 +268,26 @@ def export_mica(source: Path, output: Path, model_id: str, revision: str):
     )
 
 
+def decision_architecture(model_type, backend):
+    # The CANN 9.0 runtime predates registration of the standalone text class.
+    # Reuse our text backbone wrapper so native hybrid state hooks remain intact.
+    if backend == "ascend" and model_type == "qwen3_5_text":
+        from . import QWEN35_TEXT_TOKEN_ARCHITECTURE
+
+        return QWEN35_TEXT_TOKEN_ARCHITECTURE
+    return TEXT_ARCHITECTURES[model_type]
+
+
 def _write(output, model_id, revision, specification, head):
     config = json.loads((output / "config.json").read_text())
     text = _text_backbone(output, config)
     if text.get("model_type") not in TEXT_ARCHITECTURES:
         raise ValueError("unsupported decision backbone")
+    from .backend import resolve_backend
+
+    if resolve_backend() == "ascend" and text["model_type"] == "qwen3_5_text":
+        text["architectures"] = [decision_architecture(text["model_type"], "ascend")]
+        (output / "config.json").write_text(json.dumps(text, indent=2) + "\n")
     if not all(torch.isfinite(value).all() for value in head.values()):
         raise ValueError("nonfinite decision head")
     save_file(
