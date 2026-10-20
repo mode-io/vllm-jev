@@ -62,3 +62,43 @@ def test_ascend_export_rewrites_architecture_and_rehashes_manifest(
     assert sha256(tmp_path / "model.safetensors") == original_weights_hash
     assert manifest["files"]["config.json"] == sha256(tmp_path / "config.json")
     verify_decision(tmp_path, full=True)
+
+
+def test_weight_alias_stream_keeps_values_and_rejects_collisions():
+    from vllm_jev.checkpoint import text_backbone_weights
+
+    first = torch.tensor([1.25, -3.0])
+    second = torch.tensor([7.0])
+    source = iter(
+        [
+            ("model.language_model.layers.0.input_layernorm.weight", first),
+            ("language_model.lm_head.weight", second),
+        ]
+    )
+    mapped = list(text_backbone_weights(source))
+    assert [name for name, _ in mapped] == [
+        "model.layers.0.input_layernorm.weight",
+        "lm_head.weight",
+    ]
+    assert mapped[0][1] is first
+    assert mapped[1][1] is second
+    assert list(source) == []
+    with pytest.raises(ValueError, match="collide"):
+        list(
+            text_backbone_weights(
+                [
+                    ("model.language_model.norm.weight", first),
+                    ("model.norm.weight", second),
+                ]
+            )
+        )
+
+
+def test_flat_backbone_weights_are_not_remapped():
+    from vllm_jev.checkpoint import text_backbone_weights
+
+    value = torch.ones(2)
+    assert (
+        list(text_backbone_weights([("model.layers.0.linear_attn.A_log", value)]))[0][0]
+        == "model.layers.0.linear_attn.A_log"
+    )
