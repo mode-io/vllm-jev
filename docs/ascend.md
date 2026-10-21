@@ -63,7 +63,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Both six-arm NPU sweeps passed; measured rates below |
 | Valen | CPU-safe weight preparation; native token pooling and existing head | Text API: six warmed NPU arms passed; vision pending |
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
-| RSI-Jev v4 VL | Device-aware FP32 cross-attention head | Six warmed text API NPU arms passed; image acceptance pending |
+| RSI-Jev v4 VL | Device-aware FP32 cross-attention head | Six warmed text API NPU arms and 11 generated-image functional checks passed |
 | RSI-Jev v3 text | Device-aware FP32 cross-attention head | Six warmed NPU arms passed; best 25.43 req/s |
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
 | JevAny 4B | Exact VL backbone and shard-wise LoRA merge; native pooling | Single-question text: six warmed NPU arms passed; 16 generated-image functional checks passed |
@@ -278,3 +278,14 @@ All six concurrency arms passed 256 requests each after 16 warmup requests.
 
 This is a short text-only sweep. API rates cannot be directly ranked against
 the three-question sweeps; A separate NPU image probe passed all 16 generated-image cases: Choice, Noul and Score on three simple PNGs, two-image input, rejection of invalid image bytes/audio/three-image input, and text recovery. The probe used a 4096-token context and a two-image limit. These functional checks do not measure image accuracy, equivalence or throughput.
+
+### RSI v4 image-path functional checks
+
+All 11 generated-image checks passed on 910B3: red/blue PNGs with Choice, Noul
+and Score, two images, rejection of five images and invalid bytes, and recovery
+with valid image/text requests. Images use RSI's chat `image_url` state schema.
+A process-local observer recorded real compiler image counts/pixel hashes,
+image-pad tokens, native encode multimodal data and finished events. Each valid
+image case required those events; HTTP 200 alone was insufficient. No weights,
+outputs or product code were modified. This establishes bounded image-path
+functionality, not image accuracy, output equivalence or throughput.

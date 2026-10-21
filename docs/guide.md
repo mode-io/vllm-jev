@@ -56,7 +56,7 @@ Ascend entries have passed text API pressure tests on 910B3; Valen media on Asce
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision-pilot` |
-| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux (CUDA; Ascend text only) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
 | [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
 | [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
