@@ -6,6 +6,7 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.venv-*/
 .cache/
 .local/
 runtime/
@@ -20,6 +21,7 @@ local_tests/
 .github/workflows/
 *.log
 *.safetensors
+*.gguf
 *.pt
 .env
 .env.*

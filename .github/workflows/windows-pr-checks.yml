@@ -1,0 +1,92 @@
+name: Windows CPU lightweight checks
+
+on:
+  pull_request:
+    paths:
+      - 'vllm_jev/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - '.github/workflows/windows-pr-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - profile: legacy
+            selection: legacy-tiny
+            torch: '2.8.0'
+          - profile: modern
+            selection: modern
+            torch: '2.8.0'
+          - profile: bruv
+            selection: bruv
+            torch: '2.9.1'
+          - profile: rsi
+            selection: rsi
+            torch: '2.13.0'
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      CI_TEST_SELECTION: ${{ matrix.selection }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated CPU profile
+        shell: pwsh
+        run: |
+          python -m pip install --no-cache-dir "torch==${{ matrix.torch }}" --index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-cache-dir -e ".[windows-${{ matrix.profile }}]" pytest httpx psutil
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare pinned reference source (no model weights)
+        shell: pwsh
+        run: |
+          git -c core.autocrlf=false clone --filter=blob:none --no-checkout https://github.com/allebee/jevk5 .local/author-sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C .local/author-sdk -c core.autocrlf=false checkout f26426d16f59e8bbe1470e5b162cc89329e29b29
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "JEVK5_LITE_SDK_SOURCE=$((Resolve-Path .local/author-sdk).Path)" >> $env:GITHUB_ENV
+      - name: Run native Windows profile tests
+        shell: pwsh
+        run: |
+          @'
+          import importlib.util, os, pathlib, subprocess, sys
+          assert sys.platform == "win32"
+          spec = importlib.util.spec_from_file_location("suite", "scripts/check_windows_suite.py")
+          suite = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(suite)
+          selection = os.environ["CI_TEST_SELECTION"]
+          pathlib.Path("reports").mkdir(exist_ok=True)
+          command = [sys.executable, "-X", "utf8", "-B", "-m", "pytest",
+                     *suite.selections()[selection], "-q", "-p", "no:cacheprovider",
+                     "--junitxml=reports/" + selection + ".xml"]
+          sys.exit(subprocess.call(command))
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-${{ matrix.profile }}-reports
+          path: reports/
+          if-no-files-found: ignore
