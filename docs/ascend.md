@@ -65,7 +65,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
 | RSI-Jev text / VL | Device-aware FP32 cross-attention head | Pending |
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
-| JevAny 4B | Exact VL backbone and shard-wise LoRA merge; native pooling | Single-question text API: six warmed NPU arms passed; media pending |
+| JevAny 4B | Exact VL backbone and shard-wise LoRA merge; native pooling | Single-question text: six warmed NPU arms passed; 16 generated-image functional checks passed |
 | Other JevAny MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
 | Drex 35B MoE | Existing verified merged export and causal pointer protocol | Pending; single 64 GB cannot hold its ~65.4 GiB BF16 weights |
 | Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
@@ -274,4 +274,4 @@ All six concurrency arms passed 256 requests each after 16 warmup requests.
 | JevAny-4B | 1 | 16 | 4 | 8.41 | 0.498 |
 
 This is a short text-only sweep. API rates cannot be directly ranked against
-the three-question sweeps; image handling has not been validated on NPU.
+the three-question sweeps; A separate NPU image probe passed all 16 generated-image cases: Choice, Noul and Score on three simple PNGs, two-image input, rejection of invalid image bytes/audio/three-image input, and text recovery. The probe used a 4096-token context and a two-image limit. These functional checks do not measure image accuracy, equivalence or throughput.

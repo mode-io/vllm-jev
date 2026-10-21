@@ -120,7 +120,7 @@ Visit our [documentation](docs/guide.md) to learn more.
 ## Supported Models
 
 [Ascend support](docs/ascend.md) is available for the models marked below.
-Ascend entries have passed real-910B3 text API pressure tests; Ascend validation for Valen and JevAny covers text only. Use `--backend ascend` with the matched
+Ascend entries have passed real-910B3 text API pressure tests; Valen's Ascend validation covers text only; JevAny also passed generated-image functional checks. Use `--backend ascend` with the matched
 [Ascend runtime](docs/ascend.md). CUDA and Mac support remain model-specific.
 
 [Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
@@ -141,7 +141,7 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
-| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
 | [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef` |
