@@ -225,6 +225,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | Valen Preview | 16 | 4 | 3.47 | 1.190 | Best of six 256-request arms; text only |
 | ThisThat 1.0 | 16 | 64 | 75.28 | 0.935 | Best of six 256-request arms |
 | ThisThat 1.1 | 16 | 64 | 74.20 | 0.932 | Best of six 256-request arms |
+| ThisThat 1.2 | 16 | 64 | 73.27 | 0.999 | Best of six 256-request arms |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
 | Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
 | Open-Jev-9B | 64 | 32 | 21.07 | 1.526 | Fresh service, 4096 requests; zero failures |
