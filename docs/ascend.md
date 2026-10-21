@@ -65,7 +65,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
 | RSI-Jev text / VL | Device-aware FP32 cross-attention head | Pending |
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
-| JevAny dense / MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
+| JevAny 4B | Exact VL backbone and shard-wise LoRA merge; native pooling | Single-question text API: six warmed NPU arms passed; media pending |
+| Other JevAny MoE / VL-MoE | Existing shard-wise preparation and FP32 pointer heads; native backbone | Pending |
 | Drex 35B MoE | Existing verified merged export and causal pointer protocol | Pending; single 64 GB cannot hold its ~65.4 GiB BF16 weights |
 | Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
 | Kev 0.8B | Verified merged adapter and CPU pointer head over native NPU pooling | Six warmed NPU arms passed; best25.82 req/s@32clients |
@@ -261,3 +262,16 @@ Open-Jev-2B completed six warmed arms at each sequence budget16 and64, with
 zero failures. The highest observed short-arm throughput increased from
 13.40 req/s at budget16 to43.69 req/s at budget64. Its pinned foundation is
 retained separately for exact-version reuse by subsequent adapters.
+
+### Single-question JevAny text API
+
+JevAny-4B accepts one question per API request. Its separate sweep cycles Choice,
+Noul and Score across requests; it does not use the three-question payload above.
+All six concurrency arms passed 256 requests each after 16 warmup requests.
+
+| Model | Questions/API request | Native sequence budget | Clients | Observed req/s | p95 (s) |
+|---|---:|---:|---:|---:|---:|
+| JevAny-4B | 1 | 16 | 4 | 8.41 | 0.498 |
+
+This is a short text-only sweep. API rates cannot be directly ranked against
+the three-question sweeps; image handling has not been validated on NPU.

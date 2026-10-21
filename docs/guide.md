@@ -42,7 +42,7 @@ curl -f http://127.0.0.1:8795/health
 ## Supported models
 
 Input support depends on the model. Platform entries distinguish CUDA and Ascend on Linux.
-Ascend entries have passed text API pressure tests on 910B3; Valen images/video on
+Ascend entries have passed text API pressure tests on 910B3; Valen and JevAny media on
 Ascend remain unverified. Use `--backend ascend` and the matched [Ascend runtime](ascend.md).
 
 | Model | Input | Platform | Start server |
@@ -59,7 +59,7 @@ Ascend remain unverified. Use `--backend ascend` and the matched [Ascend runtime
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
-| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
 | [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
 | [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef-flash` |
 | [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef` |
