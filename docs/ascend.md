@@ -63,7 +63,7 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Both six-arm NPU sweeps passed; measured rates below |
 | Valen | CPU-safe weight preparation; native token pooling and existing head | Text API: six warmed NPU arms passed; vision pending |
 | vjev-vision | Native token pooling; existing listwise head | Six warmed text API NPU arms passed; images pending |
-| vjev-vision-pilot | Native token pooling; existing listwise head | Pending |
+| vjev-vision-pilot | Native token pooling; existing listwise head | Six warmed text API NPU arms passed; images pending |
 | RSI-Jev v4 VL | Device-aware FP32 cross-attention head | Six warmed text API NPU arms and 11 generated-image functional checks passed |
 | RSI-Jev v3 text | Device-aware FP32 cross-attention head | Six warmed NPU arms passed; best 25.43 req/s |
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
@@ -240,6 +240,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | RSI-Jev v4-VL 2B | 16 | 16 | 25.76 | 0.646 | Best of six 256-request arms; text only |
 | RSI-Jev v3 2B | 16 | 64 | 25.43 | 2.500 | Best of six 256-request arms |
 | vjev-vision | 16 | 64 | 18.77 | 3.433 | Best of six 256-request arms; text only |
+| vjev-vision-pilot | 16 | 64 | 20.34 | 3.129 | Best of six 256-request arms; text only |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
 | Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
 | Open-Jev-9B | 64 | 32 | 21.07 | 1.526 | Fresh service, 4096 requests; zero failures |

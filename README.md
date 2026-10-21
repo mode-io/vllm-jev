@@ -138,7 +138,7 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve lostargon/Tiny-Jev` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision` |
-| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
 | [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
 | [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
