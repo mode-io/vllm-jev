@@ -119,11 +119,10 @@ Visit our [documentation](docs/guide.md) to learn more.
 
 ## Supported Models
 
-An [Ascend development port](docs/ascend.md) is being prepared on the internal
-0.4 branch. The model table below describes existing CUDA/macOS support; it is
-not an NPU compatibility table. OpenJev-0.6B has passed real-910B3
-functional pressure and edge tests. All three Laya variants passed warmed
-NPU concurrency sweeps; other model families remain pending.
+[Ascend support](docs/ascend.md) is available for the models marked below.
+Ascend entries have passed real-910B3 text API pressure tests; Valen's Ascend
+validation covers text only. Use `--backend ascend` with the matched
+[Ascend runtime](docs/ascend.md). CUDA and Mac support remain model-specific.
 
 [Drex v2.0](docs/drex.md) has experimental Linux support for text/JSON Choice, Noul and Score. Official BF16 weights have passed native dual-A800 functional stress tests. Prefix caching and RadixFlow are disabled for this adapter; see its guide for the tested configuration.
 
@@ -131,23 +130,23 @@ Choose a checkpoint for your platform and run its command. Linux uses native vLL
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac | `vllm-jev serve ZefanCai/Open-Jev-2B` |
-| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
-| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya` |
-| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-multilingual` |
-| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac | `vllm-jev serve lostargon/Tiny-Jev` |
-| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
-| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision` |
-| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
-| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
-| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
-| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
-| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
-| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
-| [nace-ai/drex-v2.0](https://huggingface.co/nace-ai/drex-v2.0) (35B, experimental) | Text / JSON | Linux | `vllm-jev serve nace-ai/drex-v2.0 --workspace /data/models/drex --tensor-parallel-size 2 --max-model-len 8193` |
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux (CUDA, Ascend) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux (CUDA, Ascend), Mac | `vllm-jev serve lostargon/Tiny-Jev` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux (CUDA) | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef` |
+| [nace-ai/drex-v2.0](https://huggingface.co/nace-ai/drex-v2.0) (35B, experimental) | Text / JSON | Linux (CUDA) | `vllm-jev serve nace-ai/drex-v2.0 --workspace /data/models/drex --tensor-parallel-size 2 --max-model-len 8193` |
 
 <a id="rsi-jev-experimental"></a>
 <a id="clef-experimental"></a>
@@ -162,16 +161,16 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 
 | Model | Tested platform | Start server |
 |---|---|---|
-| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux | `vllm-jev serve jaredpalmer/kev-0.8b` |
-| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux | `vllm-jev serve jaredpalmer/kev-4b` |
-| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac | `vllm-jev serve Mapika/decider-0.8b` |
-| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux | `vllm-jev serve Mapika/decider-2b` |
-| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux | `vllm-jev serve sky7350/Mica-v0.1-4B` |
-| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux | `vllm-jev serve flock-io/this-that-model-1.0` |
-| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux | `vllm-jev serve flock-io/this-that-model-1.1` |
-| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
-| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux | `vllm-jev serve alibiserikbay/JevK5` |
-| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac | `vllm-jev serve alibiserikbay/JevK5-2B` |
+| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-0.8b` |
+| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
+| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac | `vllm-jev serve Mapika/decider-0.8b` |
+| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend) | `vllm-jev serve Mapika/decider-2b` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux (CUDA) | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux (CUDA, Ascend) | `vllm-jev serve flock-io/this-that-model-1.0` |
+| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux (CUDA, Ascend) | `vllm-jev serve flock-io/this-that-model-1.1` |
+| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux (CUDA, Ascend), Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
+| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux (CUDA, Ascend) | `vllm-jev serve alibiserikbay/JevK5` |
+| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Linux (Ascend), Mac | `vllm-jev serve alibiserikbay/JevK5-2B` |
 
 JevK5 currently supports **2–16 options** per question. In concurrent Linux batches, **Kev-0.8B can change its selected label**; This-That and Decider-2B can also change the most likely Score level. These consistency limits remain under investigation.
 
@@ -191,7 +190,7 @@ curl -sS http://127.0.0.1:8795/v1/systemone \
 
 The response contains `answers.intent.choice` and `answers.intent.probabilities` for the supplied labels.
 
-See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The CUDA path targets **vLLM 0.29.0 / Python 3.12+**. The internal [Ascend development port](docs/ascend.md) has separate runtime requirements.
+See the [user guide](docs/guide.md) for supported models, serving options, and Choice, Noul, and Score examples. The CUDA path targets **vLLM 0.29.0 / Python 3.12+**. [Ascend support](docs/ascend.md) has separate runtime requirements.
 
 For image questions, start a [supported vision model](docs/guide.md#supported-models) and follow its [image request example](docs/guide.md#text-and-images). [Short MP4 videos](docs/guide.md#video-input) are supported by Valen on Linux and Mac, and by Clef on Linux.
 
@@ -229,9 +228,9 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Updates
 
-### 2026-10-20 (internal development)
+### 2026-10-20
 
-- Started the Ascend 0.4 port: shared backend selection, portable readout placement,
+- Added Ascend support: shared backend selection, portable readout placement,
   a non-CUDA Tiny-Jev projection and a vLLM 0.22.1 endpoint compatibility bridge.
 - Added `vllm-jev doctor`, an isolated-runtime install helper and a complete
   [port/acceptance matrix](docs/ascend.md). OpenJev-0.6B passed 4,096 requests
