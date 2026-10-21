@@ -74,7 +74,8 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | ThisThat 1.0 / 1.1 / 1.2 | Shared slot compiler and pure-text pooling | All three passed six warmed NPU arms; rates below |
 | JevK5-2B | Vocabulary readout and answer-letter compiler | Six warmed NPU arms passed; best 25.76 req/s |
 | JevK5 standard (4B) | Vocabulary readout and answer-letter compiler | Six warmed NPU arms passed; best 20.54 req/s |
-| Other Task, Mica | Existing decision compilers and portable heads | Pending separate NPU tests |
+| Mica 4B | Vocabulary-label readout and native text pooling | Six warmed NPU arms passed; best 20.43 req/s |
+| Other Task | Existing decision compilers and portable heads | Pending separate NPU tests |
 | Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
@@ -232,6 +233,7 @@ head execution still differ. This is a short sweep result, not a sustained check
 | ThisThat 1.2 | 16 | 64 | 73.27 | 0.999 | Best of six 256-request arms |
 | JevK5-2B | 16 | 64 | 25.76 | 2.561 | Best of six 256-request arms |
 | JevK5 (4B) | 16 | 64 | 20.54 | 3.201 | Best of six 256-request arms |
+| Mica 4B | 16 | 64 | 20.43 | 3.246 | Best of six 256-request arms |
 | Decider-2B | 16 | 32 | 15.64 | 2.056 | Best of six 256-request arms |
 | Open-Jev-2B | 64 | 64 | 43.69 | 1.457 | Best of six 256-request arms |
 | Open-Jev-9B | 64 | 32 | 21.07 | 1.526 | Fresh service, 4096 requests; zero failures |

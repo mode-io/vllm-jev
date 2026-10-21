@@ -165,7 +165,7 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
 | [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac | `vllm-jev serve Mapika/decider-0.8b` |
 | [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend) | `vllm-jev serve Mapika/decider-2b` |
-| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux (CUDA) | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux (CUDA, Ascend) | `vllm-jev serve sky7350/Mica-v0.1-4B` |
 | [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux (CUDA, Ascend) | `vllm-jev serve flock-io/this-that-model-1.0` |
 | [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux (CUDA, Ascend) | `vllm-jev serve flock-io/this-that-model-1.1` |
 | [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux (CUDA, Ascend), Mac | `vllm-jev serve flock-io/this-that-model-1.2` |
