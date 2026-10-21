@@ -55,12 +55,12 @@ runs in FP32 after the shared native encoding path. Hostnames, GPU IDs, ports an
 workspace paths are supplied by the operator, not embedded in the adapter.
 
 ```bash
-curl http://127.0.0.1:8000/v1/systemone \
+curl http://127.0.0.1:8795/v1/systemone \
   -H 'Content-Type: application/json' \
   -d '{"state":"A customer requests a refund.","questions":{"team":{"type":"choice","criteria":{"billing":"Payments and refunds","technical":"Software issues"}}}}'
 ```
 
-The example uses the native Linux vLLM default port; use `--port` to change it.
+The example uses the vllm-jev default port; use `--port` to change it.
 For large downloads, the standard Hugging Face `HF_HUB_DOWNLOAD_TIMEOUT` setting
 can be increased. An already downloaded checkpoint can use the local export
 command above, avoiding a second network download. Keep HF, Torch and temporary

@@ -1,0 +1,2 @@
+# Preserve the pinned upstream Mica files across Windows checkouts.
+vllm_jev/_vendor/mica/* text eol=lf

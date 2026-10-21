@@ -1,4 +1,4 @@
-"""Prepare a Jev checkpoint and hand serving over to the native vLLM CLI."""
+"""Prepare a Jev checkpoint and select the platform's serving backend."""
 
 import argparse
 import json
@@ -9,15 +9,28 @@ from pathlib import Path
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        from .doctor import main as doctor_main
+
+        doctor_main(sys.argv[2:])
+        return
     if (
-        sys.platform != "darwin"
+        sys.platform not in ("darwin", "win32")
         and len(sys.argv) > 1
         and sys.argv[1] == "serve"
         and any(value.startswith("--help=") for value in sys.argv[2:])
     ):
+        # Extended vLLM help must not see this plugin's device-selection flag.
+        forwarded = []
+        arguments = iter(sys.argv[1:])
+        for value in arguments:
+            if value == "--backend":
+                next(arguments, None)
+            elif not value.startswith("--backend="):
+                forwarded.append(value)
         os.execvpe(
             sys.executable,
-            [sys.executable, "-m", "vllm.entrypoints.cli.main", *sys.argv[1:]],
+            [sys.executable, "-m", "vllm.entrypoints.cli.main", *forwarded],
             os.environ.copy(),
         )
     parser = argparse.ArgumentParser(prog="vllm-jev", allow_abbrev=False)
@@ -29,8 +42,18 @@ def main() -> None:
         epilog=(
             "Apple Silicon serving uses MLX or PyTorch MPS."
             if sys.platform == "darwin"
+            else "Windows CPU serving supports pinned Laya, Tiny-Jev 0.6B/1.7B, OpenJev-0.6B, Open-Jev-2B, Decider-0.8B/2B and 4B Q4_K_M, JevK5-2B/Lite and 4B/9B Q5_K_M, Kev-0.8B/0.6B, This-That 1.0/1.1/1.2, Mica-v0.1-4B Q5_K_M, Decision-0.8B Q8_0/4B Q4_K_M, Bruv1-0.8B, and RSI v1.0-0.8B. Use the model's documented isolated Windows dependency profile and GGUF CPU runtime."
+            if sys.platform == "win32"
             else "Additional arguments are forwarded to vllm serve."
         ),
+    )
+    serve.add_argument(
+        "--backend",
+        choices=("auto", "cuda", "ascend", "cpu")
+        if sys.platform == "win32"
+        else ("auto", "cuda", "ascend"),
+        default=None,
+        help="Device backend: Windows CPU or native Linux CUDA/Ascend; auto detects exposed Ascend devices.",
     )
     serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
@@ -62,6 +85,19 @@ def main() -> None:
             "task_json_v1",
             "thisthat_slot_v1",
             "mica_labels_v1",
+            *(
+                (
+                    "mica_gguf_v1",
+                    "jevk5_lite_v1",
+                    "jevk5_gguf_v1",
+                    "decider_gguf_v1",
+                    "decision_gguf_v1",
+                    "bruv_direct_options_v1",
+                    "rsi_option_xattn_v1",
+                )
+                if sys.platform == "win32"
+                else ()
+            ),
             "jevk5_letters_v1",
         ),
         default="auto",
@@ -71,12 +107,19 @@ def main() -> None:
 
     radixflow_arguments(serve)
     arguments = sys.argv[1:]
-    if sys.platform == "darwin":
+    if sys.platform in ("darwin", "win32"):
         serve.add_argument("--host", default="127.0.0.1")
         serve.add_argument("--port", type=int, default=8795)
         arguments = [
             "--help" if value.startswith("--help=") else value for value in arguments
         ]
+    if sys.platform == "win32":
+        serve.add_argument(
+            "--cpu-threads",
+            type=int,
+            default=min(4, os.cpu_count() or 1),
+            help="CPU threads for Windows serving (default: up to 4).",
+        )
     args, extra = parser.parse_known_args(arguments)
     from .radixflow.launch import selected_policy
 
@@ -94,7 +137,7 @@ def main() -> None:
         )
     except (ValueError, OSError) as error:
         parser.error(str(error))
-    if sys.platform == "darwin":
+    if sys.platform in ("darwin", "win32"):
         if args.radixflow_policy != "off":
             parser.error("RadixFlow requires the native Linux vLLM backend")
         if extra:
@@ -110,8 +153,122 @@ def main() -> None:
             parser.error(str(error))
         if sys.platform != "linux":
             parser.error("Experimental Drex serving requires Linux and native vLLM")
+    from .backend import BACKEND_ENV, resolve_backend, server_module
+
+    try:
+        backend = resolve_backend(args.backend)
+        if sys.platform == "win32":
+            if backend not in ("auto", "cpu"):
+                parser.error("Windows serving supports only the CPU backend")
+            native_entrypoint = None
+        else:
+            native_entrypoint = server_module(backend)
+        if native_entrypoint == "vllm_jev.ascend_server":
+            from .ascend_server import validate_api_count
+
+            validate_api_count(extra)
+    except ValueError as error:
+        parser.error(str(error))
     workspace = args.workspace.resolve()
+    if sys.platform == "win32":
+        from .windows_dependencies import require_windows_dependencies
+        from .windows_models import identify_source, prepare, protocol_for
+
+        if not 1 <= args.cpu_threads <= (os.cpu_count() or 1):
+            parser.error("cpu-threads must be between 1 and the logical CPU count")
+        try:
+            checkpoint = Path(args.model)
+            if checkpoint.is_dir():
+                checkpoint = checkpoint.resolve()
+                model_id = identify_source(checkpoint)
+            else:
+                model_id = args.model
+            protocol = protocol_for(model_id)
+            if args.protocol not in ("auto", protocol):
+                raise ValueError(f"{model_id} uses {protocol}, not {args.protocol}")
+            template.validate_protocol(protocol)
+            if protocol == "mica_gguf_v1":
+                from .windows_mica import validate_template
+
+                validate_template(template)
+                if args.cpu_threads > 4:
+                    raise ValueError("Mica CPU threads must be between 1 and 4")
+            if protocol == "jevk5_lite_v1":
+                from .windows_jevk5_lite import validate_template
+
+                validate_template(template)
+                if args.cpu_threads > 4:
+                    raise ValueError("JevK5-Lite CPU threads must be between 1 and 4")
+            if protocol == "jevk5_gguf_v1":
+                from .windows_jevk5_gguf import validate_template
+
+                validate_template(template)
+                if args.cpu_threads > 4:
+                    raise ValueError("JevK5 GGUF CPU threads must be between 1 and 4")
+            if protocol == "decider_gguf_v1":
+                from .windows_decider_gguf import validate_template, verify_runtime
+
+                validate_template(template)
+                if args.cpu_threads > 4:
+                    raise ValueError("Decider GGUF CPU threads must be between 1 and 4")
+                verify_runtime()
+            if protocol in (
+                "decision_gguf_v1",
+                "bruv_direct_options_v1",
+                "rsi_option_xattn_v1",
+            ):
+                from .windows_models import _adapter_model_ids, _additional_adapters
+
+                adapter = next(
+                    item
+                    for item in _additional_adapters()
+                    if model_id in _adapter_model_ids(item)
+                )
+                adapter.validate_template(template)
+                if args.cpu_threads > 4:
+                    raise ValueError("Windows CPU threads must be between 1 and 4")
+                if protocol == "decision_gguf_v1":
+                    adapter.verify_runtime()
+            require_windows_dependencies(model_id)
+            # Preparation can validate the current template too; publish the
+            # explicit CLI override before that check, not only before serving.
+            os.environ[ENVIRONMENT] = json.dumps(template.config, ensure_ascii=False)
+            current_template.cache_clear()
+            if not checkpoint.is_dir():
+                checkpoint = prepare(model_id, workspace)
+        except (ValueError, OSError) as error:
+            parser.error(str(error))
+        if protocol == "laya_markers_v1":
+            from .windows_laya import serve as serve_windows
+        else:
+            from .windows_qwen import serve as serve_windows
+
+        serve_windows(
+            checkpoint,
+            model_id,
+            host=args.host,
+            port=args.port,
+            threads=args.cpu_threads,
+        )
+        return
     environment = os.environ.copy()
+    environment[BACKEND_ENV] = backend
+    if backend == "ascend":
+        if args.radixflow_policy != "off":
+            parser.error(
+                "RadixFlow's NPU state-copy adapter is not yet validated; disable RadixFlow"
+            )
+        if environment.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":
+            parser.error("Online checkpoint creation is not yet validated on Ascend")
+        if environment.get("VLLM_JEV_LAYA_CUDA_GRAPH") == "1":
+            parser.error(
+                "Laya CUDA Graph cannot run on Ascend; unset VLLM_JEV_LAYA_CUDA_GRAPH"
+            )
+        if environment.get("VLLM_JEV_BF16_MATMUL", "default") != "default":
+            parser.error("CUDA BF16 matmul overrides cannot run on Ascend")
+        plugins_env = list(filter(None, environment.get("VLLM_PLUGINS", "").split(",")))
+        environment["VLLM_PLUGINS"] = ",".join(dict.fromkeys([*plugins_env, "ascend"]))
+
     environment.setdefault("HF_HOME", str(workspace / ".cache"))
     environment.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
     plugins = ["vllm_jev_model", "vllm_jev_endpoint"]
@@ -401,6 +558,25 @@ def main() -> None:
         or is_clef
     ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
+    if native_entrypoint == "vllm_jev.ascend_server":
+        defaults.extend(["--api-server-count", "1"])
+    if backend == "ascend":
+        # Ascend 0.22's align path unconditionally accesses recurrent-state
+        # hooks. Pure attention backbones must retain the native cache mode.
+        config_path = checkpoint / "config.json"
+        config = json.loads(config_path.read_text()) if config_path.is_file() else {}
+        if config.get("model_type") in {
+            "qwen3",
+            "qwen3_vl",
+            "qwen3_vl_moe",
+            "modernbert",
+        }:
+            for flag in ("--mamba-cache-mode", "--mamba-ssm-cache-dtype"):
+                if flag in defaults:
+                    index = defaults.index(flag)
+                    del defaults[index : index + 2]
+        defaults = [x for x in defaults if x != "--async-scheduling"]
+        defaults.extend(["--no-async-scheduling", "--enforce-eager"])
     from .radixflow.launch import configure as configure_radixflow
 
     if args.radixflow_policy != "off":
@@ -412,7 +588,7 @@ def main() -> None:
     command = [
         sys.executable,
         "-m",
-        "vllm.entrypoints.cli.main",
+        native_entrypoint,
         "serve",
         str(checkpoint),
         *defaults,

@@ -25,6 +25,25 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def text_backbone_weights(weights):
+    """Stream checkpoint aliases without copying or changing tensor values."""
+    seen = set()
+    for name, tensor in weights:
+        target = name
+        for prefix, replacement in (
+            ("model.language_model.", "model."),
+            ("language_model.model.", "model."),
+            ("language_model.lm_head.", "lm_head."),
+        ):
+            if name.startswith(prefix):
+                target = replacement + name[len(prefix) :]
+                break
+        if target in seen:
+            raise ValueError(f"text backbone weight aliases collide: {target}")
+        seen.add(target)
+        yield target, tensor
+
+
 def verify_files(
     path: Path, manifest: dict, index: dict, required: tuple[str, ...], *, full: bool
 ) -> int:

@@ -1,6 +1,8 @@
 """Template validation and exact default prompt regression tests."""
 
+import importlib
 import json
+import sys
 
 import pytest
 
@@ -19,6 +21,18 @@ def isolated_template(monkeypatch):
     current_template.cache_clear()
     yield
     current_template.cache_clear()
+
+
+@pytest.fixture
+def linux_cli(monkeypatch):
+    from vllm_jev import cli
+
+    # Load PyTorch's platform-specific libraries before simulating Linux CLI
+    # routing. Otherwise a fresh Windows test process searches for Linux .so files.
+    importlib.import_module("vllm_jev.laya_export")
+    importlib.import_module("filelock")
+    monkeypatch.setattr(sys, "platform", "linux")
+    return cli
 
 
 @pytest.mark.parametrize("state", ["Some text", {"b": 2, "a": "中"}, ["one", {"x": 1}]])
@@ -72,7 +86,8 @@ def test_invalid_configuration(config):
 def test_custom_file_is_resolved_once(tmp_path, monkeypatch):
     path = tmp_path / "template.json"
     path.write_text(
-        json.dumps({"choice_prompt": "{instructions}\n{state}\n{candidate}"})
+        json.dumps({"choice_prompt": "{instructions}\n{state}\n{candidate}"}),
+        encoding="utf-8",
     )
     template = load_template(str(path))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(template.config))
@@ -83,6 +98,16 @@ def test_custom_file_is_resolved_once(tmp_path, monkeypatch):
     ]
     monkeypatch.setenv(ENVIRONMENT, '{"layout":"native"}')
     assert candidate_prompts("state", "rules", ["A", "B"])[0] == "rules\nstate\nA"
+
+
+def test_file_load_preserves_unescaped_utf8_chinese_and_emoji(tmp_path):
+    path = tmp_path / "中文模板.json"
+    config = {"instruction_template": "按中文规则判断 😀\n{instructions}"}
+    path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+    assert "中文".encode("utf-8") in path.read_bytes()
+    template = load_template(str(path))
+    assert template.config == config
+    assert template.instructions("是否退款？") == "按中文规则判断 😀\n是否退款？"
 
 
 def test_other_protocols_allow_layout_but_protect_full_prompts():
@@ -107,25 +132,24 @@ def test_other_protocols_allow_layout_but_protect_full_prompts():
 
 def test_size_limit(tmp_path):
     path = tmp_path / "big.json"
-    path.write_text(" " * 65537)
+    path.write_text(" " * 65537, encoding="utf-8")
     with pytest.raises(ValueError, match="64 KiB"):
         load_template(str(path))
 
 
-def test_cli_resolves_template_and_does_not_forward_flag(tmp_path, monkeypatch):
-    import sys
-
-    from vllm_jev import cli
+def test_cli_resolves_template_and_does_not_forward_flag(
+    tmp_path, monkeypatch, linux_cli
+):
+    cli = linux_cli
 
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
     (checkpoint / "jev_manifest.json").write_text(
-        '{"prompt_protocol":"open_jev_choice"}'
+        '{"prompt_protocol":"open_jev_choice"}', encoding="utf-8"
     )
     config = tmp_path / "custom.json"
-    config.write_text('{"layout":"instructions-first"}')
+    config.write_text('{"layout":"instructions-first"}', encoding="utf-8")
     calls = {}
-    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -143,15 +167,18 @@ def test_cli_resolves_template_and_does_not_forward_flag(tmp_path, monkeypatch):
     assert ENVIRONMENT not in calls["prepare_env"]
 
 
-def test_cli_rejects_incompatible_full_prompt_before_engine(tmp_path, monkeypatch):
-    import sys
+def test_cli_rejects_incompatible_full_prompt_before_engine(
+    tmp_path, monkeypatch, linux_cli
+):
+    cli = linux_cli
 
-    from vllm_jev import cli
-
-    (tmp_path / "jev_manifest.json").write_text('{"prompt_protocol":"tiny_jev_marker"}')
+    (tmp_path / "jev_manifest.json").write_text(
+        '{"prompt_protocol":"tiny_jev_marker"}', encoding="utf-8"
+    )
     config = tmp_path / "prompt.json"
-    config.write_text('{"choice_prompt":"{state} {instructions} {candidate}"}')
-    monkeypatch.setattr(sys, "platform", "linux")
+    config.write_text(
+        '{"choice_prompt":"{state} {instructions} {candidate}"}', encoding="utf-8"
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -196,20 +223,17 @@ def test_state_wrapper_preserves_json_and_rejects_message_envelopes():
         template.state(123)
 
 
-def test_cli_keeps_unicode_environment_bounded(tmp_path, monkeypatch):
-    import sys
-
-    from vllm_jev import cli
+def test_cli_keeps_unicode_environment_bounded(tmp_path, monkeypatch, linux_cli):
+    cli = linux_cli
 
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
     (checkpoint / "jev_manifest.json").write_text(
-        '{"prompt_protocol":"open_jev_choice"}'
+        '{"prompt_protocol":"open_jev_choice"}', encoding="utf-8"
     )
     spec = {"instruction_template": "😀" * 12000 + "{instructions}"}
     path = tmp_path / "template.json"
-    path.write_text(json.dumps(spec, ensure_ascii=False))
-    monkeypatch.setattr(sys, "platform", "linux")
+    path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(
         sys,
         "argv",
