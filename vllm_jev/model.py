@@ -1,8 +1,6 @@
 """Native vLLM pooling models, imported only when vLLM loads a backbone."""
 
 import torch
-import triton
-import triton.language as tl
 from vllm.model_executor.models.adapters import as_embedding_model, as_seq_cls_model
 from vllm.model_executor.models.interfaces import IsHybrid, SupportsMRoPE
 from vllm.model_executor.models.modernbert import ModernBertModel
@@ -54,6 +52,15 @@ class VllmJevQwen35ForSequenceClassification(as_seq_cls_model(JevQwen35CausalLM)
     """
 
 
+class VllmJevQwen35TextForTokenEmbedding(as_embedding_model(JevQwen35CausalLM)):
+    """Pure text Qwen3.5 token pooling with native hybrid state hooks."""
+
+    def load_weights(self, weights):
+        from .checkpoint import text_backbone_weights
+
+        return super().load_weights(text_backbone_weights(weights))
+
+
 class VllmJevQwen3ForSequenceClassification(as_seq_cls_model(Qwen3ForCausalLM)):
     """Native Qwen3 pooling backbone with a merged scalar decision head."""
 
@@ -88,6 +95,12 @@ class VllmJevAnyPointerQwen35ForTokenEmbedding(
     """Native dense Qwen3.5 image/text states for JevAny's Pointer head."""
 
 
+class VllmDrexQwen35MoeForTokenEmbedding(
+    as_embedding_model(Qwen3_5MoeForConditionalGeneration)
+):
+    """Native merged Drex MoE backbone; pointer head runs after pooling."""
+
+
 class VllmJevAnyPointerQwen35MoeForTokenEmbedding(
     as_embedding_model(Qwen3_5MoeForConditionalGeneration)
 ):
@@ -108,30 +121,6 @@ class VllmLayaModernBertForTokenEmbedding(as_embedding_model(ModernBertModel)):
     """Native bidirectional ModernBERT states for Laya's trained decision head."""
 
 
-@triton.jit
-def _token_score_kernel(
-    hidden,
-    weight,
-    bias,
-    scores,
-    size: tl.constexpr,
-    row_stride: tl.constexpr,
-    col_stride: tl.constexpr,
-    block: tl.constexpr,
-):
-    row = tl.program_id(0)
-    col = tl.arange(0, block)
-    value = tl.load(
-        hidden + row * row_stride + col * col_stride, col < size, other=0
-    ).to(tl.float32)
-    scale = tl.load(weight + col, col < size, other=0)
-    mean = tl.sum(value, 0) / size
-    centered = tl.where(col < size, value - mean, 0.0)
-    variance = tl.sum(centered * centered, 0) / size
-    score = tl.sum(centered * tl.rsqrt(variance + 1e-5) * scale, 0)
-    tl.store(scores + row, score + tl.load(bias))
-
-
 class VllmJevQwen3ForTokenScoreEmbedding(as_embedding_model(Qwen3ForCausalLM)):
     """Project Tiny-Jev token scores before returning pooling outputs."""
 
@@ -146,21 +135,6 @@ class VllmJevQwen3ForTokenScoreEmbedding(as_embedding_model(Qwen3ForCausalLM)):
         return pooler_for_token_embed(pooler_config, projector=self._project_scores)
 
     def _project_scores(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        rows, size = hidden_states.shape
-        if rows < 256:
-            return hidden_states
-        result = torch.empty(
-            (rows, 1), device=hidden_states.device, dtype=torch.float32
-        )
-        _token_score_kernel[(rows,)](
-            hidden_states,
-            self.score.weight,
-            self.score.bias,
-            result,
-            size,
-            hidden_states.stride(0),
-            hidden_states.stride(1),
-            triton.next_power_of_2(size),
-            num_warps=4,
-        )
-        return result
+        from .token_score import project_token_scores
+
+        return project_token_scores(hidden_states, self.score.weight, self.score.bias)

@@ -221,7 +221,7 @@ def test_http_2b_uses_actual_adapter_loader_and_identity(monkeypatch, local_sour
 
 @pytest.mark.parametrize("local_path", [False, True])
 def test_cli_routes_2b_model_id_and_unicode_source(
-    monkeypatch, tmp_path, local_source, local_path
+    legacy_windows_dependencies, monkeypatch, tmp_path, local_source, local_path
 ):
     # Import platform-sensitive existing Laya dependencies before simulating win32.
     from vllm_jev import (

@@ -26,6 +26,7 @@ def native_template(monkeypatch):
 @pytest.fixture
 def verified_bundle(tmp_path, monkeypatch):
     """Real filesystem and hashes, with tiny non-executable synthetic files."""
+    monkeypatch.setattr(mica.sys, "platform", "win32")
     source = tmp_path / "中文 Mica checkpoint"
     source.mkdir()
     (source / "runtime").mkdir()

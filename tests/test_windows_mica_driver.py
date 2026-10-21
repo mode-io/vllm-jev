@@ -375,6 +375,7 @@ def test_reference_check_only_does_not_infer(tiny_source, tmp_path, monkeypatch)
 def test_author_clones_model_but_keeps_dlls_at_verified_original_path(
     tiny_source, tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(reference.sys, "platform", "win32")
     source, pins = tiny_source
     sdk = tmp_path / "sdk"
     (sdk / "mica").mkdir(parents=True)

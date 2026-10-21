@@ -510,7 +510,9 @@ def test_windows_cli_rejects_incompatible_options_before_preparing(
     assert error.value.code == 2
 
 
-def test_windows_cli_routes_original_checkpoint_to_cpu_server(monkeypatch, tmp_path):
+def test_windows_cli_routes_original_checkpoint_to_cpu_server(
+    legacy_windows_dependencies, monkeypatch, tmp_path
+):
     from vllm_jev import cli, windows_laya, windows_models
 
     checkpoint = tmp_path / "source"
@@ -568,7 +570,7 @@ def test_windows_cli_routes_original_checkpoint_to_cpu_server(monkeypatch, tmp_p
 
 @pytest.mark.parametrize("logical_cpus,expected_threads", [(1, 1), (2, 2), (None, 1)])
 def test_windows_cli_default_threads_fit_small_or_unknown_cpu_count(
-    monkeypatch, tmp_path, logical_cpus, expected_threads
+    legacy_windows_dependencies, monkeypatch, tmp_path, logical_cpus, expected_threads
 ):
     from vllm_jev import cli, windows_laya, windows_models
 

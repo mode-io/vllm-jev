@@ -432,7 +432,7 @@ assert windows_tiny.MODEL_ID == 'lostargon/Tiny-Jev'
 
 @pytest.mark.parametrize("local_source", [False, True])
 def test_cli_routes_tiny_to_qwen_without_native_backend(
-    monkeypatch, tmp_path, local_source
+    legacy_windows_dependencies, monkeypatch, tmp_path, local_source
 ):
     from vllm_jev import cli, windows_laya, windows_models, windows_qwen
 

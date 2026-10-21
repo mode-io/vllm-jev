@@ -4,15 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vllm-jev"
-version = "0.3.7"
+version = "0.4.0.dev1"
 description = "Native vLLM pooling and endpoint integration for Jev candidate scoring"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
 dependencies = [
-    "vllm==0.29.0; sys_platform != 'win32'",
-    "transformers>=5.10,<5.11; sys_platform != 'darwin' and sys_platform != 'win32'",
+    "transformers>=5.5.4,<6; sys_platform != 'darwin' and sys_platform != 'win32'",
     "transformers>=5.14,<6; sys_platform == 'darwin'",
     "transformers>=5.10.2,<5.18; sys_platform == 'win32'",
     "torch>=2.8,<2.14; sys_platform == 'win32'",
@@ -67,6 +66,9 @@ windows-rsi = [
     "tokenizers==0.23.3; sys_platform == 'win32'",
     "jinja2==3.1.6; sys_platform == 'win32'",
 ]
+cuda = ["vllm==0.29.0", "transformers>=5.10,<5.11"]
+# Install vLLM/torch-npu from the matched Ascend runtime image first; a generic
+# PyPI vLLM wheel can carry CUDA libraries and must not replace that runtime.
 
 [project.scripts]
 vllm-jev = "vllm_jev.cli:main"

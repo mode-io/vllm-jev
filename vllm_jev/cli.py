@@ -9,15 +9,28 @@ from pathlib import Path
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        from .doctor import main as doctor_main
+
+        doctor_main(sys.argv[2:])
+        return
     if (
         sys.platform not in ("darwin", "win32")
         and len(sys.argv) > 1
         and sys.argv[1] == "serve"
         and any(value.startswith("--help=") for value in sys.argv[2:])
     ):
+        # Extended vLLM help must not see this plugin's device-selection flag.
+        forwarded = []
+        arguments = iter(sys.argv[1:])
+        for value in arguments:
+            if value == "--backend":
+                next(arguments, None)
+            elif not value.startswith("--backend="):
+                forwarded.append(value)
         os.execvpe(
             sys.executable,
-            [sys.executable, "-m", "vllm.entrypoints.cli.main", *sys.argv[1:]],
+            [sys.executable, "-m", "vllm.entrypoints.cli.main", *forwarded],
             os.environ.copy(),
         )
     parser = argparse.ArgumentParser(prog="vllm-jev", allow_abbrev=False)
@@ -34,7 +47,15 @@ def main() -> None:
             else "Additional arguments are forwarded to vllm serve."
         ),
     )
-    serve.add_argument("model", help="Hugging Face model ID or local checkpoint.")
+    serve.add_argument(
+        "--backend",
+        choices=("auto", "cuda", "ascend", "cpu")
+        if sys.platform == "win32"
+        else ("auto", "cuda", "ascend"),
+        default=None,
+        help="Device backend: Windows CPU or native Linux CUDA/Ascend; auto detects exposed Ascend devices.",
+    )
+    serve.add_argument("model", help="Hugging Face model ID or exported checkpoint.")
     serve.add_argument(
         "--decision-template",
         help="Decision-template JSON file, or native/instructions-first compatibility preset.",
@@ -59,6 +80,7 @@ def main() -> None:
             "clef_joint_v1",
             "jevany_pointer_v1",
             "kev_pointer_v1",
+            "drex_pointer_v1",
             "decider_slot_v1",
             "task_json_v1",
             "thisthat_slot_v1",
@@ -122,6 +144,31 @@ def main() -> None:
             parser.error(f"unrecognized arguments: {' '.join(extra)}")
         if not 0 <= args.port <= 65535:
             parser.error("port must be between 0 and 65535")
+    if args.model == "nace-ai/drex-v2.0" or args.protocol == "drex_pointer_v1":
+        from .drex_export import validate_template
+
+        try:
+            validate_template(template)
+        except ValueError as error:
+            parser.error(str(error))
+        if sys.platform != "linux":
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
+    from .backend import BACKEND_ENV, resolve_backend, server_module
+
+    try:
+        backend = resolve_backend(args.backend)
+        if sys.platform == "win32":
+            if backend not in ("auto", "cpu"):
+                parser.error("Windows serving supports only the CPU backend")
+            native_entrypoint = None
+        else:
+            native_entrypoint = server_module(backend)
+        if native_entrypoint == "vllm_jev.ascend_server":
+            from .ascend_server import validate_api_count
+
+            validate_api_count(extra)
+    except ValueError as error:
+        parser.error(str(error))
     workspace = args.workspace.resolve()
     if sys.platform == "win32":
         from .windows_dependencies import require_windows_dependencies
@@ -205,6 +252,23 @@ def main() -> None:
         )
         return
     environment = os.environ.copy()
+    environment[BACKEND_ENV] = backend
+    if backend == "ascend":
+        if args.radixflow_policy != "off":
+            parser.error(
+                "RadixFlow's NPU state-copy adapter is not yet validated; disable RadixFlow"
+            )
+        if environment.get("VLLM_JEV_ONLINE_PREFIX_CACHE") == "1":
+            parser.error("Online checkpoint creation is not yet validated on Ascend")
+        if environment.get("VLLM_JEV_LAYA_CUDA_GRAPH") == "1":
+            parser.error(
+                "Laya CUDA Graph cannot run on Ascend; unset VLLM_JEV_LAYA_CUDA_GRAPH"
+            )
+        if environment.get("VLLM_JEV_BF16_MATMUL", "default") != "default":
+            parser.error("CUDA BF16 matmul overrides cannot run on Ascend")
+        plugins_env = list(filter(None, environment.get("VLLM_PLUGINS", "").split(",")))
+        environment["VLLM_PLUGINS"] = ",".join(dict.fromkeys([*plugins_env, "ascend"]))
+
     environment.setdefault("HF_HOME", str(workspace / ".cache"))
     environment.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
     plugins = ["vllm_jev_model", "vllm_jev_endpoint"]
@@ -219,6 +283,13 @@ def main() -> None:
     if checkpoint.is_dir():
         checkpoint = checkpoint.resolve()
         decision_manifest = checkpoint / "decision_manifest.json"
+        if (
+            sys.platform != "linux"
+            and decision_manifest.is_file()
+            and json.loads(decision_manifest.read_text()).get("prompt_protocol")
+            == "drex_pointer_v1"
+        ):
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
         valen_manifest = checkpoint / "valen_manifest.json"
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
@@ -382,6 +453,41 @@ def main() -> None:
     if is_decision:
         defaults[defaults.index("--convert") + 1] = "embed"
         defaults.extend(["--dtype", "bfloat16"])
+    if (
+        is_decision
+        and json.loads(decision_manifest.read_text()).get("prompt_protocol")
+        == "drex_pointer_v1"
+    ):
+        drex = json.loads(decision_manifest.read_text())
+        if args.radixflow_policy != "off":
+            parser.error(
+                "Drex prototype does not yet support prefix caching or RadixFlow"
+            )
+        if any(x.startswith("--enable-prefix-caching") for x in extra):
+            parser.error("Drex prototype requires prefix caching disabled")
+        if sys.platform != "linux":
+            parser.error("Experimental Drex serving requires Linux and native vLLM")
+        from .drex_export import validate_template
+
+        try:
+            validate_template(template)
+        except ValueError as error:
+            parser.error(str(error))
+        defaults[defaults.index("--max-model-len") + 1] = str(
+            drex["default_max_length"] + 1
+        )
+        defaults[defaults.index("--convert") + 1] = "none"
+        defaults[defaults.index("--enable-prefix-caching")] = (
+            "--no-enable-prefix-caching"
+        )
+        defaults.extend(
+            [
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                '{"image":0,"video":0}',
+            ]
+        )
     if is_jevany_pointer:
         jevany_pointer = json.loads(jevany_pointer_manifest.read_text())
         defaults[defaults.index("--max-model-len") + 1] = str(
@@ -452,6 +558,25 @@ def main() -> None:
         or is_clef
     ):
         defaults.extend(["--pooler-config", '{"task":"token_embed"}'])
+    if native_entrypoint == "vllm_jev.ascend_server":
+        defaults.extend(["--api-server-count", "1"])
+    if backend == "ascend":
+        # Ascend 0.22's align path unconditionally accesses recurrent-state
+        # hooks. Pure attention backbones must retain the native cache mode.
+        config_path = checkpoint / "config.json"
+        config = json.loads(config_path.read_text()) if config_path.is_file() else {}
+        if config.get("model_type") in {
+            "qwen3",
+            "qwen3_vl",
+            "qwen3_vl_moe",
+            "modernbert",
+        }:
+            for flag in ("--mamba-cache-mode", "--mamba-ssm-cache-dtype"):
+                if flag in defaults:
+                    index = defaults.index(flag)
+                    del defaults[index : index + 2]
+        defaults = [x for x in defaults if x != "--async-scheduling"]
+        defaults.extend(["--no-async-scheduling", "--enforce-eager"])
     from .radixflow.launch import configure as configure_radixflow
 
     if args.radixflow_policy != "off":
@@ -463,7 +588,7 @@ def main() -> None:
     command = [
         sys.executable,
         "-m",
-        "vllm.entrypoints.cli.main",
+        native_entrypoint,
         "serve",
         str(checkpoint),
         *defaults,

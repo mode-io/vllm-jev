@@ -93,7 +93,9 @@ def test_decider_http_identity_validation_and_lifecycle(monkeypatch, tmp_path, m
 
 @pytest.mark.parametrize("local", [False, True])
 @pytest.mark.parametrize("model", MODELS)
-def test_unified_cli_routes_decider_without_vllm(monkeypatch, tmp_path, local, model):
+def test_unified_cli_routes_decider_without_vllm(
+    legacy_windows_dependencies, monkeypatch, tmp_path, local, model
+):
     from vllm_jev import cli, windows_models, windows_qwen
 
     source = tmp_path / "中文 checkpoint with spaces"

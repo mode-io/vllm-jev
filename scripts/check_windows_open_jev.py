@@ -156,7 +156,11 @@ MAX_SEQUENCE_TOKENS = 1024
 
 def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+        newline="\r\n",  # Preserve the bytes of accepted Windows request artifacts.
+    )
 
 
 def digest(path):

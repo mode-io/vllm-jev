@@ -442,7 +442,9 @@ class DecisionCompiler:
                 rows = [
                     self._row(
                         base,
-                        f"{instructions}\nProposed answer: {re.sub(r'^\s*-?\d+\s*:\s*', '', level)}\nDoes the proposed answer fit?",
+                        f"{instructions}\nProposed answer: "
+                        + re.sub(r"^\s*-?\d+\s*:\s*", "", level)
+                        + "\nDoes the proposed answer fit?",
                         ["no", "yes"],
                     )
                     for level in descriptions

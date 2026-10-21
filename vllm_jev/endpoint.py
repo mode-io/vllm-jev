@@ -13,7 +13,20 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from vllm import PoolingParams
-from vllm.entrypoints.serve.utils.api_utils import load_aware_call, with_cancellation
+
+try:
+    from vllm.entrypoints.serve.utils.api_utils import (
+        load_aware_call,
+        with_cancellation,
+    )
+except ModuleNotFoundError as error:
+    # vLLM 0.22.1 (Ascend/CANN 9.0) predates the API utility relocation.
+    if error.name not in (
+        "vllm.entrypoints.serve.utils",
+        "vllm.entrypoints.serve.utils.api_utils",
+    ):
+        raise
+    from vllm.entrypoints.utils import load_aware_call, with_cancellation
 
 from . import QWEN3_PROJECTED_ARCHITECTURE
 from .decision_template import current_template
@@ -644,9 +657,7 @@ class JevEndpointPlugin:
         decision_manifest = Path(args.model) / "decision_manifest.json"
         rsijev_manifest = Path(args.model) / "rsijev_manifest.json"
         clef_manifest = Path(args.model) / "clef_manifest.json"
-        jevany_pointer_manifest = (
-            Path(args.model) / "jevany_pointer_manifest.json"
-        )
+        jevany_pointer_manifest = Path(args.model) / "jevany_pointer_manifest.json"
         if engine_client is None or not (
             manifest.is_file()
             or valen_manifest.is_file()
@@ -663,6 +674,12 @@ class JevEndpointPlugin:
             raise ValueError("VLLM_JEV_MAX_INFLIGHT must be positive")
         if decision_manifest.is_file():
             from .decision import DecisionService
+
+            if (
+                json.loads(decision_manifest.read_text()).get("prompt_protocol")
+                == "drex_pointer_v1"
+            ):
+                from .drex import DrexService as DecisionService
 
             state.vllm_decision_service = DecisionService(
                 engine_client,

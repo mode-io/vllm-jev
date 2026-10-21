@@ -44,6 +44,10 @@ def arguments(parser):
 
 def configure(args, forwarded, environment):
     policy = selected_policy(args)
+    from ..backend import resolve_backend
+
+    if resolve_backend(environment=environment) == "ascend" and policy != "off":
+        raise ValueError("RadixFlow NPU state-copy adapter is not yet validated")
     if policy == "off":
         for key in list(environment):
             if key.startswith("VLLM_JEV_RADIXFLOW_"):
@@ -98,9 +102,18 @@ def main():
     parser = argparse.ArgumentParser(prog="vllm-jev-radixflow", allow_abbrev=False)
     parser.add_argument("model", help="Ordinary generative model; no Jev export")
     arguments(parser)
+    parser.add_argument("--backend", choices=("auto", "cuda", "ascend"), default=None)
     args, extra = parser.parse_known_args()
     environment = os.environ.copy()
+    from ..backend import BACKEND_ENV, resolve_backend, server_module
+
     try:
+        backend = resolve_backend(args.backend)
+        server_module(backend)
+        environment[BACKEND_ENV] = backend
+        if backend == "ascend":
+            plugins = list(filter(None, environment.get("VLLM_PLUGINS", "").split(",")))
+            environment["VLLM_PLUGINS"] = ",".join(dict.fromkeys([*plugins, "ascend"]))
         flags = configure(args, extra, environment)
     except ValueError as e:
         parser.error(str(e))

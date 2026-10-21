@@ -12,4 +12,4 @@ if [[ ! -x "$workspace/runtime/bin/python" ]]; then
   uv venv --python 3.12 "$workspace/runtime"
 fi
 uv pip install --python "$workspace/runtime/bin/python" \
-  -e "$repo_root" transformers==5.10.4 peft==0.20.0
+  -e "$repo_root[cuda]" transformers==5.10.4 peft==0.20.0

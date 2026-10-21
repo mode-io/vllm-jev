@@ -9,10 +9,10 @@ On Linux with an NVIDIA GPU, [install uv](https://docs.astral.sh/uv/getting-star
 ```bash
 uv venv --python 3.12 .venv
 source .venv/bin/activate
-uv pip install .
+uv pip install '.[cuda]'
 ```
 
-For development, use `uv pip install -e .` to install from your working tree.
+For development, use `uv pip install -e '.[cuda]'` to install from your working tree.
 
 On Apple Silicon with macOS 15 or newer, run the setup script from the repository directory. Sourcing it leaves the Python 3.12 environment active:
 
@@ -621,31 +621,41 @@ curl -f http://127.0.0.1:8795/health
 
 ## Supported models
 
-Input support depends on the model:
+Input support depends on the model. Platform entries distinguish CUDA and Ascend on Linux.
+Ascend entries have passed text API pressure tests on 910B3; Valen media on Ascend remain unverified; JevAny also passed generated-image functional checks. Use `--backend ascend` and the matched [Ascend runtime](ascend.md).
 
 | Model | Input | Platform | Start server |
 |---|---|---|---|
-| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve ZefanCai/Open-Jev-2B` |
-| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux | `vllm-jev serve ZefanCai/Open-Jev-9B` |
-| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya` |
-| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya-multilingual` |
-| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
-| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve IamBusy/OpenJev-0.6B` |
-| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve lostargon/Tiny-Jev` |
+| [ZefanCai/Open-Jev-2B](https://huggingface.co/ZefanCai/Open-Jev-2B) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve ZefanCai/Open-Jev-2B` |
+| [ZefanCai/Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B) | Text | Linux (CUDA, Ascend) | `vllm-jev serve ZefanCai/Open-Jev-9B` |
+| [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve convaiinnovations/laya` |
+| [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve convaiinnovations/laya-multilingual` |
+| [convaiinnovations/laya-typed-decisions](https://huggingface.co/convaiinnovations/laya-typed-decisions) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve convaiinnovations/laya-typed-decisions` |
+| [IamBusy/OpenJev-0.6B](https://huggingface.co/IamBusy/OpenJev-0.6B) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve IamBusy/OpenJev-0.6B` |
+| [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve lostargon/Tiny-Jev` |
 | [lostargon/Tiny-Jev-1.7B](https://huggingface.co/lostargon/Tiny-Jev-1.7B) | Text | Windows CPU FP32 (experimental) | `vllm-jev serve lostargon/Tiny-Jev-1.7B` |
-| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux, Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
-| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision` |
-| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux | `vllm-jev serve yah01/vjev-vision-pilot` |
-| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
-| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
-| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
-| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
-| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef-flash` |
-| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux | `vllm-jev serve Cloudflare/clef` |
+| [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision` |
+| [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision-pilot` |
+| [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
+| [shgao/rsi-jev-v3.0-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v3.0-qwen3.5-2b) | Text | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v3.0-qwen3.5-2b` |
+| [SimpleJev/JevAny-Qwen3.5-4B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.5-4B-LoRA) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve SimpleJev/JevAny-Qwen3.5-4B-LoRA` |
+| [SimpleJev/JevAny-Qwen3.8-27B-LoRA](https://huggingface.co/SimpleJev/JevAny-Qwen3.8-27B-LoRA) | Text, images | Linux (CUDA) | `vllm-jev serve SimpleJev/JevAny-Qwen3.8-27B-LoRA` |
+| [Cloudflare/clef-flash](https://huggingface.co/Cloudflare/clef-flash) (9B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef-flash` |
+| [Cloudflare/clef](https://huggingface.co/Cloudflare/clef) (27B) | Text, images, video | Linux (CUDA) | `vllm-jev serve Cloudflare/clef` |
+| [nace-ai/drex-v2.0](https://huggingface.co/nace-ai/drex-v2.0) (35B, experimental) | Text / JSON | Linux (CUDA) | `vllm-jev serve nace-ai/drex-v2.0 --workspace /data/models/drex --tensor-parallel-size 2 --max-model-len 8193` |
 
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
 Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The [RSI-Jev](#rsi-jev) and [Clef](#clef) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
+
+### Drex v2.0 (experimental)
+
+Drex uses the same `vllm-jev serve` CLI and `/v1/systemone` API for text/JSON
+Choice, Noul and Score. The official 35B BF16 release has been exercised with
+TP=2 on two A800 80 GB GPUs. Use an explicit data-disk workspace. Native causal
+rows are required; media, non-native templates, prefix caching and RadixFlow
+are rejected. See the [Drex guide](drex.md) for setup and validation scope.
 
 ### Additional decision checkpoints (experimental)
 
@@ -654,18 +664,18 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 | Model | Tested platform | Start server |
 |---|---|---|
 | [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.6b` |
-| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux, Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.8b` |
-| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux | `vllm-jev serve jaredpalmer/kev-4b` |
-| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve Mapika/decider-0.8b` |
-| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux, Windows CPU (experimental) | `vllm-jev serve Mapika/decider-2b` |
+| [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve jaredpalmer/kev-0.8b` |
+| [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
+| [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve Mapika/decider-0.8b` |
+| [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve Mapika/decider-2b` |
 | [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) | Windows CPU Q4_K_M (experimental) | `vllm-jev serve Mapika/decider-4b-GGUF` |
-| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux; Windows CPU Q5_K_M (experimental) | `vllm-jev serve sky7350/Mica-v0.1-4B` |
-| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.0` |
-| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.1` |
-| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux, Mac, Windows CPU (experimental) | `vllm-jev serve flock-io/this-that-model-1.2` |
-| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux; Windows CPU official Q5_K_M (experimental) | `vllm-jev serve alibiserikbay/JevK5` |
+| [sky7350/Mica-v0.1-4B](https://huggingface.co/sky7350/Mica-v0.1-4B) | Linux (CUDA, Ascend), Windows | `vllm-jev serve sky7350/Mica-v0.1-4B` |
+| [flock-io/this-that-model-1.0](https://huggingface.co/flock-io/this-that-model-1.0) | Linux (CUDA, Ascend), Windows | `vllm-jev serve flock-io/this-that-model-1.0` |
+| [flock-io/this-that-model-1.1](https://huggingface.co/flock-io/this-that-model-1.1) | Linux (CUDA, Ascend), Windows | `vllm-jev serve flock-io/this-that-model-1.1` |
+| [flock-io/this-that-model-1.2](https://huggingface.co/flock-io/this-that-model-1.2) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve flock-io/this-that-model-1.2` |
+| [alibiserikbay/JevK5](https://huggingface.co/alibiserikbay/JevK5) | Linux (CUDA, Ascend), Windows | `vllm-jev serve alibiserikbay/JevK5` |
 | [alibiserikbay/JevK5-9B](https://huggingface.co/alibiserikbay/JevK5-9B) | Windows CPU official Q5_K_M (experimental) | `vllm-jev serve alibiserikbay/JevK5-9B` |
-| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Mac, Windows CPU (experimental) | `vllm-jev serve alibiserikbay/JevK5-2B` |
+| [alibiserikbay/JevK5-2B](https://huggingface.co/alibiserikbay/JevK5-2B) | Linux (Ascend), Mac, Windows | `vllm-jev serve alibiserikbay/JevK5-2B` |
 | [alibiserikbay/JevK5-Lite](https://huggingface.co/alibiserikbay/JevK5-Lite) | Windows CPU only (experimental) | `vllm-jev serve alibiserikbay/JevK5-Lite` |
 | [evalengine/decision-0.8b-gguf](https://huggingface.co/evalengine/decision-0.8b-gguf) | Windows CPU Q8_0 (experimental) | `vllm-jev serve evalengine/decision-0.8b-gguf` |
 | [bvolpato/bruv1-0.8b](https://huggingface.co/bvolpato/bruv1-0.8b) | Windows CPU FP32 (experimental) | `vllm-jev serve bvolpato/bruv1-0.8b` |
@@ -1151,3 +1161,9 @@ RTX 5090 trials reported up to about 5% throughput loss across the tested models
 - Improved model validation and request handling.
 
 See the [demos](../README.md#demos) and [performance results](../README.md#inference-performance).
+
+## Ascend development port
+
+See [Ascend setup and acceptance matrix](ascend.md). Existing model listings
+above do not imply NPU validation. Use a matched native Ascend runtime and
+`--backend ascend`; CUDA-specific graph/cache hooks are not silently reused.
