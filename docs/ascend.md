@@ -57,11 +57,11 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 |---|---|---|
 | OpenJev 0.6B | CPU-safe HF/PEFT preparation; native scalar pooling | 910B3: 128/8, 1024/32 and 4096/64 client-concurrency requests passed; see record below |
 | Open-Jev 2B | Shared device selection; CPU-safe HF/PEFT preparation; native scalar pooling | S16/S64 NPU sweeps passed; best43.69 req/s atS64,64clients |
-| Open-Jev 9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Pending |
-| Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Pending |
+| Open-Jev 9B | Shared device selection; CPU-safe HF/PEFT preparation; native pooling | Six-arm sweeps and 4096-request NPU check passed; 21.07 req/s |
+| Tiny-Jev | FP32 tensor score projection on non-CUDA devices; CUDA Triton kernel lazily loaded | Six warmed NPU arms passed; best 55.27 req/s |
 | Laya English | Portable head placement; eager head instead of CUDA Graph | Six warmed NPU sweep arms passed (256 requests each); best10.40 req/s at16 clients, nativeS16 |
 | Laya multilingual / typed decisions | Shared portable head and protocol/compiler | Both six-arm NPU sweeps passed; measured rates below |
-| Valen | CPU-safe weight preparation; native token pooling and existing head | Pending |
+| Valen | CPU-safe weight preparation; native token pooling and existing head | Text API: six warmed NPU arms passed; vision pending |
 | vjev / vjev pilot | Native token pooling; existing listwise head | Pending |
 | RSI-Jev text / VL | Device-aware FP32 cross-attention head | Pending |
 | Clef / Clef-Flash | Device-aware joint head; existing text/image/video schema | Pending |
@@ -70,7 +70,10 @@ cancellation and engine lifecycle. The bridge does not patch an installed file.
 | Decider 0.8B | Pure-text Qwen3.5 pooling registration and strict weight-name alias loading | Six warmed NPU arms passed; best15.94 req/s@32clients |
 | Kev 0.8B | Verified merged adapter and CPU pointer head over native NPU pooling | Six warmed NPU arms passed; best25.82 req/s@32clients |
 | Decider 2B | Shared pure-text pooling and alias loading | Six warmed NPU arms passed; best15.64 req/s@32clients |
-| Other Task, ThisThat, Mica, JevK5 | Existing decision compilers and portable heads | Pending separate NPU tests |
+| Kev 4B | Shared pure-text pooling, strict alias loading and CPU pointer head | Six warmed NPU arms passed; best 20.49 req/s |
+| ThisThat 1.0 / 1.1 / 1.2 | Shared slot compiler and pure-text pooling | All three passed six warmed NPU arms; rates below |
+| JevK5-2B | Vocabulary readout and answer-letter compiler | Six warmed NPU arms passed; best 25.76 req/s |
+| Other Task, Mica, JevK5 standard | Existing decision compilers and portable heads | Pending separate NPU tests |
 | Choice / Noul / Score, templates | Shared endpoint and compilers retained | Three typed operations passed on OpenJev 0.6B; other families/templates pending |
 | Media / video | Shared input limits and processors retained | Native NPU vision acceptance pending |
 | Native prefix cache | Still owned by the engine; protocol-specific cache restrictions retained | NPU cache/token conservation pending |
