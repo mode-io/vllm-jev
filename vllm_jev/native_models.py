@@ -17,11 +17,13 @@ from .checkpoint import sha256, verify
 from .public_models import PROFILES
 from .public_models import prepare as prepare_open_jev
 
-# Some Kev releases publish a full fine-tune on main and their servable LoRA
-# form on a separate tag. Pin those to the tag's commit so dispatch sees the
-# adapter + pointer head rather than full backbone shards.
+# Pinned Kev releases. kev-27b main is the v2 full-weight release (0.85 full
+# fine-tune + 0.15 v1, T=1.32), served as the default like the author's
+# `kev.serve --run jaredpalmer/kev-27b`. Its v1 LoRA (tag v1-lora, commit
+# 01b81998019be550f0ae858727df49bac9511195) has the composite LoRA layout that
+# export_kev handles, but is not selectable by model ID here.
 KEV_PINNED_REVISIONS = {
-    "jaredpalmer/kev-27b": "01b81998019be550f0ae858727df49bac9511195",
+    "jaredpalmer/kev-27b": "af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf",
 }
 BRANCH_PROTOCOL = "openjev_branch_v03"
 CHOICE_PROTOCOL = "open_jev_choice"
@@ -405,6 +407,13 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
             raise ValueError("cached checkpoint belongs to another repository")
         if protocol not in ("auto", manifest.get("prompt_protocol")):
             raise ValueError("requested protocol differs from cached checkpoint")
+        pinned = KEV_PINNED_REVISIONS.get(model_id)
+        if pinned and manifest.get("source_revision") != pinned:
+            raise ValueError(
+                f"cached {model_id} checkpoint is revision "
+                f"{manifest.get('source_revision')}, but {pinned} is pinned; "
+                f"remove {output} and prepare again"
+            )
         verify(output, full=True)
         return output
 
@@ -544,6 +553,55 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
                 return export_task_json(source, temporary, model_id, info.sha)
 
         return _publish(output, model_id, info.sha, "task_json_v1", build)
+    if (
+        "head.pt" in files
+        and "adapter_config.json" not in files
+        and {"config.json", "model.safetensors.index.json"} <= files
+    ):
+        from .decision_export import export_kev_full
+
+        from .decision_export import check_kev_full_head
+
+        if protocol not in ("auto", "kev_pointer_v1"):
+            raise ValueError(f"{model_id} uses kev_pointer_v1, not {protocol}")
+        # Validate the small head before fetching tens of GB of shards. A
+        # revision-specific directory keeps files from another pinned revision
+        # (such as an earlier LoRA download) out of this export.
+        local = workspace / "public" / model_id / info.sha
+        check_kev_full_head(
+            Path(
+                hf_hub_download(
+                    repo_id=model_id,
+                    filename="head.pt",
+                    revision=info.sha,
+                    token=False,
+                    local_dir=local,
+                )
+            )
+        )
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=info.sha,
+                token=False,
+                local_dir=local,
+                allow_patterns=[
+                    "model*.safetensors",
+                    "model.safetensors.index.json",
+                    "config.json",
+                    "tokenizer*.json",
+                    "chat_template.jinja",
+                    "head.pt",
+                ],
+            )
+        )
+        return _publish(
+            output,
+            model_id,
+            info.sha,
+            "kev_pointer_v1",
+            lambda temporary: export_kev_full(source, temporary, model_id, info.sha),
+        )
     if "decider_config.json" in files or {"head.pt", "adapter_config.json"} <= files:
         from .decision_export import export_decider, export_kev
 

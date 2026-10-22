@@ -569,6 +569,110 @@ def _export_kev_composite(
     )
 
 
+KEV_MARKERS = (
+    "<|fim_prefix|>",
+    "<|fim_middle|>",
+    "<|box_start|>",
+    "<|box_end|>",
+    "<|fim_suffix|>",
+)
+_KEV_FULL_PREFIXES = ("embed_tokens.", "layers.", "norm.")
+
+
+def check_kev_full_head(path: Path) -> dict:
+    """Validate a full-weight Kev head.pt; cheap enough to run before download."""
+    meta = torch.load(path, map_location="cpu", weights_only=True)
+    if not isinstance(meta, dict) or meta.get("weights") != "full":
+        raise ValueError("head.pt does not describe a full-weight Kev release")
+    if not isinstance(meta.get("base"), str):
+        raise ValueError("full-weight Kev head.pt must name its foundation model")
+    if meta.get("option_isolation", False):
+        raise ValueError(
+            "option-isolated Kev needs a native attention-mask implementation"
+        )
+    if meta.get("special_embeddings", False):
+        raise ValueError("this Kev release needs its trained delimiter embeddings")
+    head = meta.get("head") or {}
+    if set(head) != {"q.weight", "q.bias", "k.weight", "k.bias"}:
+        raise ValueError("unsupported Kev pointer head")
+    return meta
+
+
+def export_kev_full(source: Path, output: Path, model_id: str, revision: str):
+    """Export a full-weight Kev release (e.g. kev-27b v2) without a base model.
+
+    Kev's own loader builds the backbone straight from these shards. They hold
+    the bare ``Qwen3_5TextModel`` keys (``embed_tokens.*``, ``layers.*``,
+    ``norm.*``) with no LM head or MTP layer, so each shard is rewritten once
+    with the ``model.`` prefix vLLM's ``Qwen3_5ForCausalLM`` expects. Tensor
+    values and dtypes are copied unchanged.
+    """
+    output.mkdir(parents=True, exist_ok=True)
+    if any(output.iterdir()):
+        raise FileExistsError(output)
+    if (source / "adapter_config.json").is_file():
+        raise ValueError("this Kev release is an adapter; use the LoRA export")
+    meta = check_kev_full_head(source / "head.pt")
+    head = meta["head"]
+
+    config = json.loads((source / "config.json").read_text())
+    kind = config.get("model_type")
+    if "text_config" in config or kind not in ("qwen3_5_text", "qwen3_5_moe_text"):
+        raise ValueError("unsupported full-weight Kev backbone")
+    if type(config.get("vocab_size")) is not int or config["vocab_size"] <= 0:
+        raise ValueError("full-weight Kev config is missing its vocabulary size")
+
+    index = _index(source)
+    names = set(index["weight_map"])
+    if any(not name.startswith(_KEV_FULL_PREFIXES) for name in names):
+        raise ValueError("full-weight Kev shards must hold bare text-model keys")
+    weights = {}
+    for shard in sorted(set(index["weight_map"].values())):
+        with safe_open(source / shard, framework="pt", device="cpu") as file:
+            if set(file.keys()) != {
+                name for name, owner in index["weight_map"].items() if owner == shard
+            }:
+                raise ValueError(f"full-weight Kev shard disagrees with index: {shard}")
+            tensors = {"model." + name: file.get_tensor(name) for name in file.keys()}
+        # A fresh file, never a hard link into the Hugging Face cache.
+        save_file(tensors, str(output / shard), metadata={"format": "pt"})
+        weights.update({name: shard for name in tensors})
+        del tensors
+    (output / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": weights}, indent=2) + "\n"
+    )
+
+    config["architectures"] = [TEXT_ARCHITECTURES[kind]]
+    # The pointer head consumes hidden states; vLLM's LM head is never used, so
+    # tie it to the embeddings instead of requiring a checkpoint lm_head.
+    config["tie_word_embeddings"] = True
+    config.pop("mtp_num_hidden_layers", None)
+    config.pop("mtp_use_dedicated_embeddings", None)
+    (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+
+    tokenizer = AutoTokenizer.from_pretrained(source, local_files_only=True)
+    tokenizer.save_pretrained(output)
+    marker_ids = [tokenizer.convert_tokens_to_ids(marker) for marker in KEV_MARKERS]
+    if len(set(marker_ids)) != 5 or any(
+        i is None or i >= config["vocab_size"] for i in marker_ids
+    ):
+        raise ValueError("Kev delimiters are missing from the backbone vocabulary")
+    return _write(
+        output,
+        model_id,
+        revision,
+        {
+            "prompt_protocol": "kev_pointer_v1",
+            "max_options": 255,
+            "temperature": meta.get("temperature", 1.0),
+            "markers": marker_ids,
+            "foundation_repository": meta["base"],
+            "foundation_revision": meta.get("base_revision"),
+        },
+        head,
+    )
+
+
 def export_kev(base: Path, source: Path, output: Path, model_id: str, revision: str):
     from peft import PeftModel
     from transformers import AutoModelForCausalLM

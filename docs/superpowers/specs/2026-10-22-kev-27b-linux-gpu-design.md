@@ -24,9 +24,13 @@ The existing native `export_kev` cannot handle Kev-27B for two reasons:
 
 ## Facts established (from the live Hugging Face repos)
 
-- `jaredpalmer/kev-27b` **main** is a full fine-tune (11 full shards, no
-  adapter) — not servable by the LoRA merge path. The LoRA release lives on the
-  **`v1-lora` tag** (`adapter_config.json` + `adapter_model.safetensors` +
+- `jaredpalmer/kev-27b` **main** (`af0e6d55`) is the v2 full-weight release:
+  11 bf16 shards with bare `Qwen3_5TextModel` keys (`embed_tokens.*`,
+  `layers.*`, `norm.*`; no `lm_head`, MTP or vision), a flat `qwen3_5_text`
+  config (`tie_word_embeddings=false`), and a `head.pt` with
+  `weights="full"`, T=1.3195. It is 0.85 x full fine-tune + 0.15 x v1
+  (`interpolation.json`) and needs no base download. The v1 LoRA release lives
+  on the **`v1-lora` tag** (`01b81998`) (`adapter_config.json` + `adapter_model.safetensors` +
   `head.pt`), base `Qwen/Qwen3.8-27B`, LoRA r=16/alpha=32, `target_modules`
   including the Gated-DeltaNet `in_proj_*` projections, `task_type`
   `FEATURE_EXTRACTION`, `bias` none.
@@ -64,17 +68,25 @@ The existing small-model branch (`kev-0.6b/0.8b`, flat config, whole-model
 merge) is left untouched. Selection between branches is by presence of
 `text_config` in the base config.
 
-Dispatch (`native_models.py`): add a pinned map so `jaredpalmer/kev-27b`
-resolves to its **`v1-lora`** revision (the servable LoRA form), avoiding the
-full-fine-tune main. `kev-4b` needs no pin (main is already LoRA). The Kev
-dispatch branch already downloads the base from `head.pt`'s
-`base`/`base_revision` and calls `export_kev`, so only revision selection and
-the fixture flow change.
+**Full-weight releases** (`export_kev_full`): when a repo has `head.pt`, a
+config and a shard index but no adapter, the head is downloaded and validated
+first (`weights == "full"`, pointer-head tensors, no option isolation or
+special embeddings), then the shards. Each shard is rewritten once with the
+`model.` prefix vLLM's `Qwen3_5ForCausalLM` expects, values and per-tensor
+dtypes unchanged. `tie_word_embeddings` is set to true because the pointer head
+reads hidden states only and the checkpoint has no `lm_head`; MTP fields are
+dropped. The result is the same `kev_pointer_v1` manifest as the LoRA path.
+
+Dispatch (`native_models.py`): `KEV_PINNED_REVISIONS` pins
+`jaredpalmer/kev-27b` to its v2 `main` commit, matching the author's default
+`kev.serve --run jaredpalmer/kev-27b`. Downloads go to a per-revision
+directory, and a cached checkpoint from a different revision is rejected with
+instructions to remove it. `kev-4b` needs no pin (main is already LoRA).
 
 ## Goals
 
-- `vllm-jev serve jaredpalmer/kev-27b` exports and serves on Linux GPU via the
-  native `kev_pointer_v1` path.
+- `vllm-jev serve jaredpalmer/kev-27b` exports and serves the v2 full-weight
+  release on Linux GPU via the native `kev_pointer_v1` path.
 - The same new branch also enables `jaredpalmer/kev-4b`.
 - Per-shard merge so peak memory stays near one shard, not the whole backbone.
 - Full checksum/identity verification preserved (`verify_decision`).
@@ -83,8 +95,10 @@ the fixture flow change.
 
 - No change to Windows CPU `windows_kev.py` (27B FP32 CPU is not viable) or to
   the small-model whole-model merge branch.
-- No support for the full-fine-tune **main** form of kev-27b (no adapter). If
-  desired later, that is a separate "native full-weight Kev" branch.
+- No model-ID syntax for selecting the kev-27b `v1-lora` tag; its layout is
+  handled by the LoRA export but `vllm-jev serve` serves the pinned v2 main.
+- Disk: the ~51 GB download is kept, and the renamed export is a second ~51 GB
+  copy (hard links are impossible once keys change).
 - No new model architecture classes — reuse `Qwen3_5ForCausalLM` already
   registered via `model.py`.
 - No multimodal/image support for Kev (it is a text/JSON pointer model).
