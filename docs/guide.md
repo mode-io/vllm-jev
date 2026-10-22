@@ -666,7 +666,7 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 | [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.6b` |
 | [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve jaredpalmer/kev-0.8b` |
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
-| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
+| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) (v2 full weights) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
 | [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve Mapika/decider-0.8b` |
 | [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve Mapika/decider-2b` |
 | [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) | Windows CPU Q4_K_M (experimental) | `vllm-jev serve Mapika/decider-4b-GGUF` |
@@ -688,6 +688,8 @@ Linux uses native vLLM pooling; Mac uses MLX; the listed Windows adapters use th
 The additional [Decision, Bruv and RSI Windows adapters](windows-next-four.md) have their own native-only templates, option limits and isolated environments. Eval Engine Decision is separate from Mapika Decider; RSI v1.0 is a text release separate from the v3.0/v4.0-VL adapters below.
 
 The large Kev pointer models (`kev-4b`, `kev-27b`) serve natively on Linux CUDA. For LoRA releases, the Qwen3.5/3.8 bases are composite (text backbone under `text_config`); preparation merges the rank-16/alpha-32 LoRA one shard at a time, strips the unused vision/MTP modules, and exports a text `Qwen3_5ForCausalLM` backbone plus the Kev pointer head under `kev_pointer_v1`. `kev-27b` is served from its pinned `main` commit `af0e6d55`, the v2 full-weight release (every backbone weight fine-tuned, then averaged 0.85/0.15 with v1; calibrated T = 1.32). It needs no separate base download: preparation rewrites its bare `Qwen3_5TextModel` keys under the `model.` prefix with tensor values and dtypes preserved, and keeps the pointer head. Allow about 110 GB of disk: the ~51 GB download is kept and the renamed export is a second copy. `vllm-jev serve` does not yet select the v1 LoRA at the `v1-lora` tag; the model card notes v2 is less well calibrated than v1 on long contracts (CUAD). Like the smaller Kev releases, Score is joint/listwise (the `isolated` field is rejected) and the common text/JSON-only service limits apply.
+
+Real-weight single-A800 acceptance passed for both Kev-4B and Kev-27B: each completed six client-concurrency arms of 256 requests (1,536 total), plus longer-input, invalid-input and disconnect-recovery checks. The [native CUDA validation report](kev-native-validation.md) records the exact revisions, budgets and short-sweep measurements. These checks do not establish original-author output parity or decision accuracy.
 
 <a id="rsi-jev-experimental"></a>
 

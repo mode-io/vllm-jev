@@ -188,7 +188,7 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 | [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows | `vllm-jev serve jaredpalmer/kev-0.6b` |
 | [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve jaredpalmer/kev-0.8b` |
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
-| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
+| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) (v2 full weights) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
 | [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve Mapika/decider-0.8b` |
 | [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve Mapika/decider-2b` |
 | [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) (Windows: Q4_K_M) | Windows | `vllm-jev serve Mapika/decider-4b-GGUF` |
@@ -263,6 +263,7 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ### 2026-10-22
 
+- Added native CUDA serving for the pinned Kev-27B v2 full-weight release and composite-base Kev LoRA export. Kev-4B and Kev-27B each passed 1,536 measured requests on one A800, plus long-input, rejection and disconnect-recovery checks. Preparation now rejects inconsistent LoRA rank and invalid scaling metadata. See the [workload, short-sweep results and validation limits](docs/kev-native-validation.md).
 - Added experimental native Windows x64 CPU serving for 24 checkpoints, with four isolated dependency profiles and model-specific FP32, BF16 or GGUF artifacts. See the [Windows setup and model table](docs/guide.md#windows-cpu-experimental).
 - Updated Supported Models to show CUDA, Ascend, Mac and Windows coverage together. The Ascend matrix now records 23 text API model results, with separate image-path functional checks for JevAny and RSI v4.
 

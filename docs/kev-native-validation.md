@@ -1,6 +1,6 @@
 # Kev native CUDA validation
 
-This page records the acceptance scope for [PR #11](https://github.com/mode-io/vllm-jev/pull/11). Kev-4B has passed the checks below. **Kev-27B v2 is still downloading and has not yet passed real-weight GPU acceptance.** Its new support must not be described as validated until that run completes.
+This page records the acceptance scope for [PR #11](https://github.com/mode-io/vllm-jev/pull/11). Kev-4B and the pinned Kev-27B v2 full-weight release have both passed real-weight CUDA acceptance. Each completed its own fresh-service run on the same single A800; the models were served sequentially.
 
 ## Checkpoints and implementation
 
@@ -11,22 +11,28 @@ Downloads use fixed revisions and must match the official Hugging Face Git/LFS h
 
 ## Measured workload
 
-The Kev-4B run used one NVIDIA A800-SXM4-80GB, vLLM 0.29.0, Torch 2.13.0 and Transformers 5.10.4. Native BF16 pooling and an FP32 decision head were served with eager execution, synchronous scheduling, prefix caching enabled, 32 sequence slots, an 8,192-token batch budget and a 4,096-token complete-prompt limit. No quantization was used.
+Both model runs used one NVIDIA A800-SXM4-80GB, vLLM 0.29.0, Torch 2.13.0 and Transformers 5.10.4. Native BF16 pooling and an FP32 decision head were served with eager execution, synchronous scheduling, prefix caching enabled, 32 sequence slots, an 8,192-token batch budget and a 4,096-token complete-prompt limit. No quantization was used.
 
 Each API request contained three logical questions: a two-option Choice, a Noul and a three-level listwise Score. Request IDs varied in the state. Six client-concurrency arms each measured 256 completed requests after 16 separate warmup requests. API rates include host processing and queueing; they are not GPU-kernel time, token throughput, or original-author speed comparisons.
 
-| Client concurrency | Completed | Failures | API requests/s | P50 (s) | P95 (s) |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 256 | 0 | 5.88 | 0.170 | 0.175 |
-| 4 | 256 | 0 | 12.18 | 0.331 | 0.336 |
-| 8 | 256 | 0 | 24.49 | 0.328 | 0.334 |
-| 16 | 256 | 0 | 47.15 | 0.338 | 0.358 |
-| 32 | 256 | 0 | 78.31 | 0.404 | 0.438 |
-| 64 | 256 | 0 | 123.82 | 0.500 | 0.555 |
+| Model | Client concurrency | Completed | Failures | API requests/s | P50 (s) | P95 (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Kev-4B | 1 | 256 | 0 | 5.88 | 0.170 | 0.175 |
+| Kev-4B | 4 | 256 | 0 | 12.18 | 0.331 | 0.336 |
+| Kev-4B | 8 | 256 | 0 | 24.49 | 0.328 | 0.334 |
+| Kev-4B | 16 | 256 | 0 | 47.15 | 0.338 | 0.358 |
+| Kev-4B | 32 | 256 | 0 | 78.31 | 0.404 | 0.438 |
+| Kev-4B | 64 | 256 | 0 | 123.82 | 0.500 | 0.555 |
+| Kev-27B | 1 | 256 | 0 | 3.05 | 0.330 | 0.339 |
+| Kev-27B | 4 | 256 | 0 | 6.23 | 0.643 | 0.672 |
+| Kev-27B | 8 | 256 | 0 | 12.08 | 0.662 | 0.679 |
+| Kev-27B | 16 | 256 | 0 | 17.77 | 0.902 | 0.908 |
+| Kev-27B | 32 | 256 | 0 | 22.68 | 1.409 | 1.432 |
+| Kev-27B | 64 | 256 | 0 | 27.95 | 2.287 | 2.327 |
 
-These are single short sweeps, including a roughly two-second highest-concurrency arm. They do not establish sustained saturation, uncertainty intervals, or model quality. Logical questions/s are three times API requests/s for this workload; this does not imply three or seven physical engine branches per API request.
+These are single short sweeps. The highest-concurrency arms lasted approximately 2.07 seconds for Kev-4B and 9.16 seconds for Kev-27B. They do not establish sustained saturation, uncertainty intervals, or model quality. Logical questions/s are three times API requests/s for this workload; this does not imply three or seven physical engine branches per API request.
 
-All 1,536 measured requests completed with finite, normalized outputs and zero decode tokens. Three longer-input requests, three invalid-input rejections, eight connection closures followed by a successful recovery request also passed. The service loaded its real exported weights, no foreign GPU owner was observed during acceptance, and GPU memory returned to zero after cleanup. Raw logs and results were archived with SHA-256 verification.
+Each model completed all 1,536 measured requests with finite, normalized outputs and zero decode tokens: 3,072 measured requests in total. Per model, three longer-input requests, three invalid-input rejections, and eight connection closures followed by a successful recovery request also passed. Both services loaded their real exported weights, no foreign GPU owner was observed during acceptance, and GPU memory returned to zero after each cleanup. Native model loading reported approximately 7.94 GiB for Kev-4B and 47.77 GiB for Kev-27B; these are model-loading memory reports, not total serving-memory requirements. Raw logs and results were archived with SHA-256 verification.
 
 ## Bugs and regression scope
 
