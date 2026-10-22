@@ -432,7 +432,7 @@ def export_task_adapter(
         return export_task_json(Path(temporary), output, model_id, revision)
 
 
-def _kev_adapter_pairs(source: Path, scale: float) -> dict:
+def _kev_adapter_pairs(source: Path, scale: float, rank: int) -> dict:
     """Map each LoRA pair to its language-backbone destination weight.
 
     The left/right tensors multiply to a delta applied to
@@ -457,7 +457,19 @@ def _kev_adapter_pairs(source: Path, scale: float) -> dict:
         destination = (
             "model.language_model." + prefix[len("base_model.model.") :] + ".weight"
         )
-        pairs[destination] = (tensors[name], tensors[right_name], scale)
+        left, right = tensors[name], tensors[right_name]
+        if (
+            left.ndim != 2
+            or right.ndim != 2
+            or left.shape[0] != rank
+            or right.shape[1] != rank
+            or not left.is_floating_point()
+            or not right.is_floating_point()
+            or not torch.isfinite(left).all()
+            or not torch.isfinite(right).all()
+        ):
+            raise ValueError(f"Kev LoRA tensors disagree with configured rank: {prefix}")
+        pairs[destination] = (left, right, scale)
         paired_right.add(right_name)
     if paired_right != right_names or not pairs:
         raise ValueError("Kev adapter contains incomplete LoRA pairs")
@@ -485,7 +497,12 @@ def _export_kev_composite(
         # single alpha/r merge below.
         raise ValueError("unsupported Kev adapter type")
     rank, alpha = adapter.get("r"), adapter.get("lora_alpha")
-    if type(rank) is not int or rank <= 0 or not isinstance(alpha, (int, float)):
+    if (
+        type(rank) is not int
+        or rank <= 0
+        or type(alpha) not in (int, float)
+        or not math.isfinite(alpha)
+    ):
         raise ValueError("invalid Kev LoRA scale")
 
     config = json.loads((base / "config.json").read_text())
@@ -497,7 +514,7 @@ def _export_kev_composite(
         raise ValueError("Kev composite base is missing its vocabulary size")
 
     base_index = _index(base)
-    pairs = _kev_adapter_pairs(source, float(alpha) / rank)
+    pairs = _kev_adapter_pairs(source, float(alpha) / rank, rank)
     missing = set(pairs) - set(base_index["weight_map"])
     if missing:
         raise ValueError(

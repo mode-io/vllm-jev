@@ -556,3 +556,25 @@ def test_full_export_rejects_non_bare_keys(tmp_path, monkeypatch, name):
     (source / "model.safetensors.index.json").write_text(json.dumps(index))
     with pytest.raises(ValueError, match="bare text-model keys"):
         dx.export_kev_full(source, output, "jaredpalmer/kev-27b", "main1")
+
+
+@pytest.mark.parametrize("rank", [1, 3])
+def test_composite_rejects_rank_config_disagreement(tmp_path, monkeypatch, rank):
+    base, source, output, *_ = make_composite_fixture(tmp_path, monkeypatch)
+    path = source / "adapter_config.json"
+    config = json.loads(path.read_text())
+    config["r"] = rank
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="configured rank"):
+        dx.export_kev(base, source, output, "test/kev", "rev")
+
+
+@pytest.mark.parametrize("alpha", [float("nan"), float("inf"), True])
+def test_composite_rejects_invalid_alpha(tmp_path, monkeypatch, alpha):
+    base, source, output, *_ = make_composite_fixture(tmp_path, monkeypatch)
+    path = source / "adapter_config.json"
+    config = json.loads(path.read_text())
+    config["lora_alpha"] = alpha
+    path.write_text(json.dumps(config))
+    with pytest.raises(ValueError, match="scale"):
+        dx.export_kev(base, source, output, "test/kev", "rev")

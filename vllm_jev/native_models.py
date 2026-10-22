@@ -558,9 +558,7 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
         and "adapter_config.json" not in files
         and {"config.json", "model.safetensors.index.json"} <= files
     ):
-        from .decision_export import export_kev_full
-
-        from .decision_export import check_kev_full_head
+        from .decision_export import check_kev_full_head, export_kev_full
 
         if protocol not in ("auto", "kev_pointer_v1"):
             raise ValueError(f"{model_id} uses kev_pointer_v1, not {protocol}")
