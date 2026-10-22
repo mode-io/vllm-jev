@@ -432,6 +432,143 @@ def export_task_adapter(
         return export_task_json(Path(temporary), output, model_id, revision)
 
 
+def _kev_adapter_pairs(source: Path, scale: float) -> dict:
+    """Map each LoRA pair to its language-backbone destination weight.
+
+    The left/right tensors multiply to a delta applied to
+    ``model.language_model.<module>.weight`` so ``_text_backbone`` can later
+    rename the merged shard to the pure ``model.<module>.weight`` key.
+    """
+    tensors = load_file(str(source / "adapter_model.safetensors"))
+    left_suffix, right_suffix = ".lora_A.weight", ".lora_B.weight"
+    left_names = {name for name in tensors if name.endswith(left_suffix)}
+    right_names = {name for name in tensors if name.endswith(right_suffix)}
+    unexpected = set(tensors) - left_names - right_names
+    if unexpected:
+        raise ValueError(f"unsupported Kev adapter tensors: {sorted(unexpected)[:3]}")
+    pairs, paired_right = {}, set()
+    for name in sorted(left_names):
+        prefix = name[: -len(left_suffix)]
+        right_name = prefix + right_suffix
+        if right_name not in tensors:
+            raise ValueError(f"Kev LoRA B tensor missing for {prefix}")
+        if not prefix.startswith("base_model.model."):
+            raise ValueError(f"unsupported Kev LoRA tensor: {name}")
+        destination = (
+            "model.language_model." + prefix[len("base_model.model.") :] + ".weight"
+        )
+        pairs[destination] = (tensors[name], tensors[right_name], scale)
+        paired_right.add(right_name)
+    if paired_right != right_names or not pairs:
+        raise ValueError("Kev adapter contains incomplete LoRA pairs")
+    return pairs
+
+
+def _export_kev_composite(
+    base: Path, source: Path, output: Path, model_id: str, revision: str, meta: dict
+):
+    """Merge a Kev LoRA into a large composite Qwen base one shard at a time."""
+    adapter = json.loads((source / "adapter_config.json").read_text())
+    if (
+        adapter.get("peft_type", "LORA") != "LORA"
+        or adapter.get("bias", "none") != "none"
+        or adapter.get("use_rslora", False)
+        or adapter.get("use_dora", False)
+        or adapter.get("fan_in_fan_out", False)
+        or adapter.get("lora_bias", False)
+        or adapter.get("rank_pattern")
+        or adapter.get("alpha_pattern")
+        or adapter.get("modules_to_save")
+    ):
+        # Anything that changes the per-weight scale (rslora's alpha/sqrt(r),
+        # per-layer rank/alpha) or adds tensors would silently corrupt the
+        # single alpha/r merge below.
+        raise ValueError("unsupported Kev adapter type")
+    rank, alpha = adapter.get("r"), adapter.get("lora_alpha")
+    if type(rank) is not int or rank <= 0 or not isinstance(alpha, (int, float)):
+        raise ValueError("invalid Kev LoRA scale")
+
+    config = json.loads((base / "config.json").read_text())
+    text = config.get("text_config", {})
+    if text.get("model_type") not in ("qwen3_5_text", "qwen3_5_moe_text"):
+        raise ValueError("unsupported Kev composite backbone")
+    vocab_size = text.get("vocab_size", config.get("vocab_size"))
+    if type(vocab_size) is not int or vocab_size <= 0:
+        raise ValueError("Kev composite base is missing its vocabulary size")
+
+    base_index = _index(base)
+    pairs = _kev_adapter_pairs(source, float(alpha) / rank)
+    missing = set(pairs) - set(base_index["weight_map"])
+    if missing:
+        raise ValueError(
+            f"Kev LoRA targets missing from the base: {sorted(missing)[:3]}"
+        )
+
+    by_shard = {}
+    for name in pairs:
+        by_shard.setdefault(base_index["weight_map"][name], []).append(name)
+    for shard in sorted(set(base_index["weight_map"].values())):
+        source_shard, output_shard = base / shard, output / shard
+        targets = by_shard.get(shard, [])
+        if not targets:
+            try:
+                os.link(source_shard, output_shard)
+            except OSError:
+                shutil.copy2(source_shard, output_shard)
+            continue
+        with safe_open(source_shard, framework="pt", device="cpu") as file:
+            tensors = {name: file.get_tensor(name) for name in file.keys()}
+        for name in targets:
+            left, right, scale = pairs[name]
+            original = tensors[name]
+            delta = right.float() @ left.float()
+            if delta.shape != original.shape:
+                raise ValueError(f"Kev LoRA shape mismatch for {name}")
+            tensors[name] = (original.float() + delta * scale).to(original.dtype)
+        save_file(
+            {name: value.contiguous() for name, value in tensors.items()},
+            str(output_shard),
+            metadata={"format": "pt"},
+        )
+    (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+    (output / "model.safetensors.index.json").write_text(
+        json.dumps(base_index, indent=2) + "\n"
+    )
+    # The LoRA tag may ship only the adapter; fall back to the base tokenizer.
+    tokenizer_source = source if (source / "tokenizer.json").is_file() else base
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_source, local_files_only=True
+    )
+    tokenizer.save_pretrained(output)
+
+    markers = [
+        "<|fim_prefix|>",
+        "<|fim_middle|>",
+        "<|box_start|>",
+        "<|box_end|>",
+        "<|fim_suffix|>",
+    ]
+    marker_ids = [tokenizer.convert_tokens_to_ids(marker) for marker in markers]
+    if len(set(marker_ids)) != 5 or any(
+        i is None or i >= vocab_size for i in marker_ids
+    ):
+        raise ValueError("Kev delimiters are missing from the backbone vocabulary")
+    return _write(
+        output,
+        model_id,
+        revision,
+        {
+            "prompt_protocol": "kev_pointer_v1",
+            "max_options": 255,
+            "temperature": meta.get("temperature", 1.0),
+            "markers": marker_ids,
+            "foundation_repository": meta["base"],
+            "foundation_revision": meta.get("base_revision"),
+        },
+        meta["head"],
+    )
+
+
 def export_kev(base: Path, source: Path, output: Path, model_id: str, revision: str):
     from peft import PeftModel
     from transformers import AutoModelForCausalLM
@@ -449,6 +586,14 @@ def export_kev(base: Path, source: Path, output: Path, model_id: str, revision: 
     adapter = json.loads((source / "adapter_config.json").read_text())
     if adapter["base_model_name_or_path"] != meta["base"]:
         raise ValueError("Kev adapter and head refer to different bases")
+    head = meta.get("head", {})
+    if set(head) != {"q.weight", "q.bias", "k.weight", "k.bias"}:
+        raise ValueError("unsupported Kev pointer head")
+    # Large composite bases (kev-4b, kev-27b) carry their text backbone under
+    # text_config. Merge the LoRA one shard at a time and strip vision/MTP,
+    # instead of materializing the whole backbone through PEFT.
+    if "text_config" in json.loads((base / "config.json").read_text()):
+        return _export_kev_composite(base, source, output, model_id, revision, meta)
     model = AutoModelForCausalLM.from_pretrained(
         base, dtype=torch.bfloat16, local_files_only=True
     )
@@ -479,9 +624,6 @@ def export_kev(base: Path, source: Path, output: Path, model_id: str, revision: 
         i is None or i >= config["vocab_size"] for i in marker_ids
     ):
         raise ValueError("Kev delimiters are missing from the backbone vocabulary")
-    head = meta.get("head", {})
-    if set(head) != {"q.weight", "q.bias", "k.weight", "k.bias"}:
-        raise ValueError("unsupported Kev pointer head")
     return _write(
         output,
         model_id,

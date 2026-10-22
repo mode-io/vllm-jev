@@ -17,6 +17,12 @@ from .checkpoint import sha256, verify
 from .public_models import PROFILES
 from .public_models import prepare as prepare_open_jev
 
+# Some Kev releases publish a full fine-tune on main and their servable LoRA
+# form on a separate tag. Pin those to the tag's commit so dispatch sees the
+# adapter + pointer head rather than full backbone shards.
+KEV_PINNED_REVISIONS = {
+    "jaredpalmer/kev-27b": "01b81998019be550f0ae858727df49bac9511195",
+}
 BRANCH_PROTOCOL = "openjev_branch_v03"
 CHOICE_PROTOCOL = "open_jev_choice"
 TINY_PROTOCOL = "tiny_jev_marker"
@@ -402,7 +408,12 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
         verify(output, full=True)
         return output
 
-    info = HfApi().model_info(model_id, files_metadata=False, token=False)
+    info = HfApi().model_info(
+        model_id,
+        revision=KEV_PINNED_REVISIONS.get(model_id),
+        files_metadata=False,
+        token=False,
+    )
     files = {item.rfilename for item in info.siblings}
     from .decision_protocols import TASK_JSON_MODELS, THIS_THAT_MODELS
 

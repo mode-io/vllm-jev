@@ -188,6 +188,7 @@ These text-only checkpoints use the same command and `/v1/systemone` API for Cho
 | [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows | `vllm-jev serve jaredpalmer/kev-0.6b` |
 | [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve jaredpalmer/kev-0.8b` |
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
+| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
 | [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve Mapika/decider-0.8b` |
 | [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve Mapika/decider-2b` |
 | [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) (Windows: Q4_K_M) | Windows | `vllm-jev serve Mapika/decider-4b-GGUF` |

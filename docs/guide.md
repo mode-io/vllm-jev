@@ -666,6 +666,7 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 | [jaredpalmer/kev-0.6b](https://huggingface.co/jaredpalmer/kev-0.6b) | Windows CPU (experimental) | `vllm-jev serve jaredpalmer/kev-0.6b` |
 | [jaredpalmer/kev-0.8b](https://huggingface.co/jaredpalmer/kev-0.8b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve jaredpalmer/kev-0.8b` |
 | [jaredpalmer/kev-4b](https://huggingface.co/jaredpalmer/kev-4b) | Linux (CUDA, Ascend) | `vllm-jev serve jaredpalmer/kev-4b` |
+| [jaredpalmer/kev-27b](https://huggingface.co/jaredpalmer/kev-27b) | Linux (CUDA) | `vllm-jev serve jaredpalmer/kev-27b` |
 | [Mapika/decider-0.8b](https://huggingface.co/Mapika/decider-0.8b) | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve Mapika/decider-0.8b` |
 | [Mapika/decider-2b](https://huggingface.co/Mapika/decider-2b) | Linux (CUDA, Ascend), Windows | `vllm-jev serve Mapika/decider-2b` |
 | [Mapika/decider-4b-GGUF](https://huggingface.co/Mapika/decider-4b-GGUF) | Windows CPU Q4_K_M (experimental) | `vllm-jev serve Mapika/decider-4b-GGUF` |
@@ -685,6 +686,8 @@ These text-only adapters use `vllm-jev serve` and `/v1/systemone` for Choice, No
 Linux uses native vLLM pooling; Mac uses MLX; the listed Windows adapters use the experimental CPU backend. These adapters use only `/v1/systemone`. JevK5, JevK5-2B and the Windows JevK5-9B adapter accept 2–16 options per question; Windows JevK5 4B/9B select their fixed official Q5_K_M artifacts and support only the native template. The separate Windows-only JevK5-Lite adapter accepts 2–255 Choice options and 2–10 listwise Score levels, within a 512-token complete-question limit. Kev-0.6B/0.8B use separate pinned Qwen3/Qwen3.5 bases with a 1,024-token limit per complete question. This-That keeps at most 1,536 state tokens before adding the questions; the Windows 1.0/1.1/1.2 adapter additionally rejects a complete packed request exceeding 1,024 tokens after padding. [Decider-4B Q4_K_M](#validate-decider-4b-q4_k_m-on-windows) requires the fixed official CPU wheel, accepts only the native template, and limits each complete prompt to 1,024 tokens.
 
 The additional [Decision, Bruv and RSI Windows adapters](windows-next-four.md) have their own native-only templates, option limits and isolated environments. Eval Engine Decision is separate from Mapika Decider; RSI v1.0 is a text release separate from the v3.0/v4.0-VL adapters below.
+
+The large Kev pointer models (`kev-4b`, `kev-27b`) serve natively on Linux CUDA. Their Qwen3.5/3.8 bases are composite (text backbone under `text_config`); preparation merges the rank-16/alpha-32 LoRA one shard at a time, strips the unused vision/MTP modules, and exports a text `Qwen3_5ForCausalLM` backbone plus the Kev pointer head under `kev_pointer_v1`. `kev-27b` publishes a full fine-tune on `main` and its servable LoRA form on its `v1-lora` tag, so preparation pins that tag automatically. Like the smaller Kev releases, Score is joint/listwise (the `isolated` field is rejected) and the common text/JSON-only service limits apply.
 
 <a id="rsi-jev-experimental"></a>
 
