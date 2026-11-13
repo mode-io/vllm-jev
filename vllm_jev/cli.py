@@ -75,6 +75,7 @@ def main() -> None:
             "tiny_jev_marker",
             "laya_markers_v1",
             "valen_qwen_v1",
+            "valen_decision_v1",
             "vjev_vision_v1",
             "rsijev_xattn_v1",
             "clef_joint_v1",
@@ -291,11 +292,14 @@ def main() -> None:
         ):
             parser.error("Experimental Drex serving requires Linux and native vLLM")
         valen_manifest = checkpoint / "valen_manifest.json"
+        valen_decision_manifest = checkpoint / "valen_decision_manifest.json"
         vjev_manifest = checkpoint / "vjev_manifest.json"
         laya_manifest = checkpoint / "laya_manifest.json"
         rsijev_manifest = checkpoint / "rsijev_manifest.json"
         clef_manifest = checkpoint / "clef_manifest.json"
         jevany_pointer_manifest = checkpoint / "jevany_pointer_manifest.json"
+        if sys.platform == "darwin" and valen_decision_manifest.is_file():
+            parser.error("Valen-Decision-1.5 serving requires Linux and native vLLM")
         if sys.platform == "darwin" and rsijev_manifest.is_file():
             parser.error("RSI-Jev serving requires Linux and native vLLM")
         if sys.platform == "darwin" and clef_manifest.is_file():
@@ -327,6 +331,8 @@ def main() -> None:
                         if clef_manifest.is_file()
                         else vjev_manifest
                         if vjev_manifest.is_file()
+                        else valen_decision_manifest
+                        if valen_decision_manifest.is_file()
                         else valen_manifest
                         if valen_manifest.is_file()
                         else laya_manifest
@@ -337,6 +343,7 @@ def main() -> None:
                 or rsijev_manifest.is_file()
                 or clef_manifest.is_file()
                 or vjev_manifest.is_file()
+                or valen_decision_manifest.is_file()
                 or valen_manifest.is_file()
                 or laya_manifest.is_file()
                 else "vllm-jev"
@@ -356,6 +363,10 @@ def main() -> None:
             parser.error("RSI-Jev serving requires Linux and native vLLM")
         if sys.platform == "darwin" and model_id.startswith("Cloudflare/clef"):
             parser.error("Clef serving requires Linux and native vLLM")
+        if sys.platform == "darwin" and model_id.startswith(
+            "Valen-Team/Valen-Decision-1.5"
+        ):
+            parser.error("Valen-Decision-1.5 serving requires Linux and native vLLM")
         if sys.platform == "darwin" and model_id.startswith("SimpleJev/JevAny-"):
             parser.error("JevAny Pointer serving requires Linux and native vLLM")
         checkpoint = workspace / "checkpoint" / model_id
@@ -379,6 +390,7 @@ def main() -> None:
         except subprocess.CalledProcessError as error:
             raise SystemExit(error.returncode) from None
     valen_manifest = checkpoint / "valen_manifest.json"
+    valen_decision_manifest = checkpoint / "valen_decision_manifest.json"
     vjev_manifest = checkpoint / "vjev_manifest.json"
     laya_manifest = checkpoint / "laya_manifest.json"
     decision_manifest = checkpoint / "decision_manifest.json"
@@ -390,6 +402,7 @@ def main() -> None:
     is_rsijev = rsijev_manifest.is_file()
     is_clef = clef_manifest.is_file()
     is_valen = valen_manifest.is_file()
+    is_valen_decision = valen_decision_manifest.is_file()
     is_vjev = vjev_manifest.is_file()
     is_laya = laya_manifest.is_file()
     if args.protocol != "auto" and not (
@@ -406,6 +419,8 @@ def main() -> None:
             if is_clef
             else vjev_manifest
             if is_vjev
+            else valen_decision_manifest
+            if is_valen_decision
             else valen_manifest
             if is_valen
             else laya_manifest
@@ -548,8 +563,68 @@ def main() -> None:
                 json.dumps({"image": 8, "video": 1}),
             ]
         )
+    if is_valen_decision:
+        valen_decision = json.loads(valen_decision_manifest.read_text())
+        if sys.platform != "linux" or backend == "ascend":
+            parser.error("Valen-Decision-1.5 serving requires Linux and CUDA")
+        if args.radixflow_policy != "off":
+            parser.error("Valen-Decision-1.5 does not support RadixFlow")
+        if any(
+            x.startswith(("--enable-prefix-caching", "--enable-chunked-prefill"))
+            for x in extra
+        ):
+            parser.error(
+                "Valen-Decision-1.5 requires prefix caching and chunked prefill disabled"
+            )
+        from .valen_decision_export import validate_template
+
+        try:
+            validate_template(template)
+        except ValueError as error:
+            parser.error(str(error))
+        # vLLM schedules at most max_model_len - 1 prompt tokens.
+        limit = str(valen_decision["max_length"] + 1)
+        defaults[defaults.index("--max-model-len") + 1] = limit
+        # Block attention needs each request as one complete prefill: no prefix
+        # reuse and no chunking.
+        defaults[defaults.index("--enable-prefix-caching")] = (
+            "--no-enable-prefix-caching"
+        )
+        align = defaults.index("--mamba-cache-mode")
+        del defaults[align : align + 2]
+        # The block mask is built from the step's raw prompt tokens.
+        defaults = [x for x in defaults if x != "--async-scheduling"]
+        defaults.extend(
+            [
+                "--no-async-scheduling",
+                "--no-enable-chunked-prefill",
+                "--max-num-batched-tokens",
+                limit,
+                # The block mask is built per request in Python.
+                "--enforce-eager",
+                # This backend reports where each prompt of a step starts.
+                "--attention-backend",
+                "FLASH_ATTN",
+                # FlashInfer's linear-attention prefill varies with batch
+                # composition; the Triton kernel does not.
+                "--gdn-prefill-backend",
+                "triton",
+                "--dtype",
+                "bfloat16",
+                "--hf-overrides",
+                '{"head_dtype":"model"}',
+                "--limit-mm-per-prompt",
+                '{"image":8,"video":0}',
+                # The engine must resize images to the trained pixel budget.
+                "--mm-processor-kwargs",
+                json.dumps(
+                    {"size": valen_decision["media_kwargs"]["images_kwargs"]["size"]}
+                ),
+            ]
+        )
     if (
         is_valen
+        or is_valen_decision
         or is_vjev
         or is_laya
         or is_decision

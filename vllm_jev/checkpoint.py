@@ -115,6 +115,10 @@ def verify(path: Path, *, full: bool = True) -> dict:
         from .vjev_export import verify_vjev
 
         return verify_vjev(path, full=full)
+    if (path / "valen_decision_manifest.json").is_file():
+        from .valen_decision_export import verify_valen_decision
+
+        return verify_valen_decision(path, full=full)
     if (path / "valen_manifest.json").is_file():
         from .valen_export import verify_valen
 

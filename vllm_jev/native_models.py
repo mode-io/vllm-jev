@@ -94,6 +94,7 @@ def prepare(model_id: str, workspace: Path, protocol: str = "auto") -> Path:
         TINY_PROTOCOL,
         "laya_markers_v1",
         "valen_qwen_v1",
+        "valen_decision_v1",
         "vjev_vision_v1",
         "rsijev_xattn_v1",
         "clef_joint_v1",
@@ -338,6 +339,48 @@ def _prepare(model_id: str, workspace: Path, protocol: str) -> Path:
         try:
             export_vjev(source, temporary, model_id)
             verify_vjev(temporary, full=True)
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+        return output
+
+    from .valen_decision_export import MODELS as VALEN_DECISION_MODELS
+
+    if model_id in VALEN_DECISION_MODELS:
+        if sys.platform != "linux":
+            raise ValueError(
+                "Valen-Decision-1.5 serving requires Linux and native vLLM"
+            )
+        if protocol not in ("auto", "valen_decision_v1"):
+            raise ValueError(f"{model_id} uses valen_decision_v1, not {protocol}")
+        from .valen_decision_export import (
+            MANIFEST,
+            SOURCE_FILES,
+            export_valen_decision,
+            verify_valen_decision,
+        )
+
+        output = workspace / "checkpoint" / model_id
+        if output.exists():
+            manifest = json.loads((output / MANIFEST).read_text())
+            if manifest.get("source_repository") != model_id:
+                raise ValueError("cached checkpoint belongs to another repository")
+            verify_valen_decision(output, full=True)
+            return output
+        source = Path(
+            snapshot_download(
+                repo_id=model_id,
+                revision=VALEN_DECISION_MODELS[model_id],
+                token=False,
+                local_dir=workspace / "public" / model_id,
+                allow_patterns=SOURCE_FILES,
+            )
+        )
+        temporary = Path(tempfile.mkdtemp(prefix=".valen-decision-", dir=output.parent))
+        try:
+            export_valen_decision(source, temporary, model_id)
+            verify_valen_decision(temporary, full=True)
             temporary.replace(output)
         finally:
             if temporary.exists():
@@ -817,6 +860,7 @@ def main() -> None:
             TINY_PROTOCOL,
             "laya_markers_v1",
             "valen_qwen_v1",
+            "valen_decision_v1",
             "vjev_vision_v1",
             "rsijev_xattn_v1",
             "clef_joint_v1",

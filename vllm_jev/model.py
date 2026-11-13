@@ -71,6 +71,96 @@ class VllmValenQwen35ForTokenEmbedding(
     """Native Qwen3.5 token states for Valen's shared decision head."""
 
 
+class VllmValenDecisionQwen35ForTokenEmbedding(
+    as_embedding_model(Qwen3_5ForConditionalGeneration)
+):
+    """Native Qwen3.5 token states under Valen-Decision-1.5 block attention.
+
+    The full-attention layers follow the block mask the release was trained
+    with; the linear-attention layers stay causal. The Mixer and grounding
+    heads run after pooling. The Valen preview keeps its own class above.
+    """
+
+    # Block boundaries are read from the prompt's chat-turn tokens.
+    requires_raw_input_tokens = True
+
+    def __init__(self, *, vllm_config, prefix: str = "", **kwargs):
+        super().__init__(vllm_config=vllm_config, prefix=prefix, **kwargs)
+        import json
+        from pathlib import Path
+
+        from vllm.tokenizers.registry import cached_tokenizer_from_config
+
+        from .valen_decision_blocks import GLUE, MASKS, BlockAttention
+
+        manifest = json.loads(
+            (
+                Path(vllm_config.model_config.model) / "valen_decision_manifest.json"
+            ).read_text()
+        )
+        mask = manifest["full_attention_mask"]
+        if mask not in MASKS:
+            raise ValueError(f"unsupported Valen full-attention mask: {mask}")
+        tokenizer = cached_tokenizer_from_config(vllm_config.model_config)
+        self._block_encode = lambda text: tokenizer.encode(
+            text, add_special_tokens=False
+        )
+        self._block_glue = [self._block_encode(text) for text in GLUE]
+        self._block_bidirectional = mask == "block_bidirectional"
+        self._block_layers = []
+        for layer in self.language_model.model.layers:
+            if layer.layer_type != "full_attention":
+                continue
+            attention = layer.self_attn
+            if attention.attn.attn_backend.get_name() not in (
+                "FLASH_ATTN",
+                "TRITON_ATTN",
+            ):
+                # Other backends do not report where each prompt starts.
+                raise ValueError(
+                    "Valen-Decision-1.5 requires --attention-backend FLASH_ATTN "
+                    "or TRITON_ATTN"
+                )
+            attention.attn = BlockAttention(attention.attn, attention.scaling)
+            self._block_layers.append(attention.attn)
+
+    def forward(
+        self,
+        input_ids,
+        positions,
+        intermediate_tensors=None,
+        inputs_embeds=None,
+        **kwargs,
+    ):
+        from vllm.forward_context import get_forward_context
+
+        from .valen_decision_blocks import prompt_blocks
+
+        blocks = prompt_blocks(
+            input_ids,
+            positions,
+            get_forward_context().attn_metadata,
+            self._block_layers[0].attn.layer_name,
+            self._block_glue,
+            self._block_bidirectional,
+            self._block_encode,
+        )
+        for layer in self._block_layers:
+            layer.blocks = blocks
+        try:
+            return super().forward(
+                input_ids, positions, intermediate_tensors, inputs_embeds, **kwargs
+            )
+        finally:
+            for layer in self._block_layers:
+                layer.blocks = None
+
+    def load_weights(self, weights):
+        from .valen_decision_blocks import backbone_weights
+
+        return super().load_weights(backbone_weights(weights))
+
+
 class VllmVjevQwen35ForTokenEmbedding(
     as_embedding_model(Qwen3_5ForConditionalGeneration)
 ):
