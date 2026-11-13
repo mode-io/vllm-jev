@@ -635,6 +635,7 @@ Ascend entries have passed text API pressure tests on 910B3; Valen media on Asce
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve lostargon/Tiny-Jev` |
 | [lostargon/Tiny-Jev-1.7B](https://huggingface.co/lostargon/Tiny-Jev-1.7B) | Text | Windows CPU FP32 (experimental) | `vllm-jev serve lostargon/Tiny-Jev-1.7B` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text + images + video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [Valen-Team/Valen-Decision-1.5-0.8B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-0.8B), [2B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-2B), [4B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-4B), [9B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-9B), [27B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-27B) | Text + images + boxes | Linux (CUDA) | `vllm-jev serve Valen-Team/Valen-Decision-1.5-0.8B` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text + images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text + images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text + images | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
@@ -648,6 +649,102 @@ Ascend entries have passed text API pressure tests on 910B3; Valen media on Asce
 Use `yah01/vjev-vision` for the current vjev release; the pilot is an earlier checkpoint. Both were trained on single images.
 
 Valen and vjev image requests use `/v1/systemone`: up to 8 PNG/JPEG images, 8 MiB per image. Valen also accepts one short MP4 video per request. The [RSI-Jev](#rsi-jev) and [Clef](#clef) adapters have their own limits and request formats; see [Text and images](#text-and-images) and [Video input](#video-input).
+
+<a id="valen-decision-15"></a>
+
+### Valen-Decision-1.5
+
+Valen-Decision-1.5 is a separate adapter from [Valen-Preview](#text-and-image-with-valen) and keeps its own prompt, heads and serving options; the preview path is unchanged. The five releases run on Linux with CUDA and answer every question about a state in **one forward pass**: the state, all questions with their candidates, and one readout per question share a single sequence. In the full-attention layers the state sees only itself and each question sees the state, the shared turn markers and its own block, which is the block-structured mask the release was trained with. The linear-attention layers stay causal.
+
+The adapter is selected by the prepared checkpoint, so `vllm-jev serve Valen-Team/Valen-Decision-1.5-2B` is enough:
+
+```bash
+vllm-jev serve Valen-Team/Valen-Decision-1.5-2B
+```
+
+- Up to 64 questions per request. Choice accepts 1–255 named options, Score 2–255 ordered levels, and Noul its fixed true/false candidates with an optional `{"true": ..., "false": ...}` rubric that becomes part of the question text, as in training.
+- `bbox` questions return a box instead of probabilities. They need a release with a grounding head, which all five published checkpoints have, and at least one image in the state. Add `"image": N` to point at the N-th image; the default is the first.
+- The complete sequence is limited to **16,384 tokens**, including the state, images, questions, candidates and readouts. A longer request is rejected rather than truncated.
+- Images: up to 8 PNG or JPEG data URLs as `image_url` parts in `state.messages`, 8 MiB each. The engine resizes them to the pixel budget the release was trained with. Video is not accepted.
+- The head reads a state for every token of one complete prefill, so prefix caching, chunked prefill and RadixFlow are off for this adapter, and the engine runs eager with the `FLASH_ATTN` attention backend and the Triton gated-delta prefill kernel. Only the default/native decision template is supported.
+- `Valen` answers with the release's own values: `probabilities`, `choice`, `score` with its `legend`, `noul`, each `confidence`, and for `bbox` a normalized `bbox`, its `point` and a `confidence`.
+- Apple Silicon (MLX), Windows CPU and Ascend are outside this adapter's scope; the preview checkpoint remains the Valen model for Mac.
+
+A `bbox` question beside ordinary ones:
+
+```bash
+curl -s http://127.0.0.1:8795/v1/systemone \
+  -H 'Content-Type: application/json' -d @- <<'JSON'
+{
+  "state": {"messages": [{"role": "user", "content": [
+    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo..."}},
+    {"type": "text", "text": "A photo of one shelf."}
+  ]}]},
+  "questions": {
+    "box": {"type": "bbox", "instructions": "the red box"},
+    "stocked": {"type": "noul", "instructions": "The shelf is stocked."}
+  }
+}
+JSON
+```
+
+```json
+{
+  "answers": {
+    "box": {"type": "bbox", "bbox": [0.061, 0.133, 0.299, 0.471],
+            "point": [0.18, 0.302], "confidence": 0.8574},
+    "stocked": {"type": "noul", "noul": 0.9231}
+  }
+}
+```
+
+To prepare a checkpoint from a local copy of a release instead of downloading it:
+
+```bash
+python -m vllm_jev.valen_decision_export --source /path/to/Valen-Decision-1.5-2B \
+  --output /path/to/checkpoint --model-id Valen-Team/Valen-Decision-1.5-2B
+vllm-jev serve /path/to/checkpoint
+```
+
+Export checks each released file against its pinned SHA256, links the weight shards unchanged, and writes the two FP32 heads beside a plain Qwen3.5 `config.json`. The release's Python files are not copied or executed.
+
+#### Validate Valen-Decision-1.5 against the release
+
+[`scripts/valen_decision_reference.py`](../scripts/valen_decision_reference.py) records the published release's own answers through `AutoModel.from_pretrained(..., trust_remote_code=True)` and `model.predict`, then sends the same requests to a running server and records every difference.
+
+vLLM runs this backbone in bfloat16 only, and bfloat16 is not tight enough for a fixed tolerance: the release's own answers move by up to a few hundredths between bfloat16 and float32. The driver therefore fails a comparison on structural differences (answer types, candidate keys, legends, input-token counts) and reports numeric differences and selected answers as data; `--tolerance` adds a numeric gate if you want one. Correctness is judged from four recordings of the same requests on one GPU:
+
+```bash
+REF="python scripts/valen_decision_reference.py --reference-only --sweep \
+  --model-path /path/to/Valen-Decision-1.5-2B --model-id Valen-Team/Valen-Decision-1.5-2B"
+$REF --dtype float32 --output fp32.json                  # the release in float32
+$REF --dtype bfloat16 --output bf16.json                 # the release as it loads itself
+$REF --dtype bfloat16 --mask causal --output control.json  # a deliberately wrong mask
+vllm-jev serve /path/to/checkpoint &
+python scripts/valen_decision_reference.py --sweep --reference bf16.json \
+  --model-id Valen-Team/Valen-Decision-1.5-2B --output served.json
+python scripts/valen_decision_reference.py --summarize fp32.json bf16.json control.json served.json
+```
+
+The served answers should sit as close to the release's float32 answers as the release's own bfloat16 answers do, and far closer than the causal-mask control. Without `--sweep` the driver uses a fixed set of 10 requests (text Choice, Noul with and without a rubric, Score, a four-question shared state, Chinese text, one-image and two-image decisions, and `bbox` questions over one and two images). `--sweep` uses 16 drawings with three `bbox` requests and one three-question decision request each: 64 requests, 48 boxes and 48 selected answers.
+
+Recorded on one NVIDIA H200 on 13 November 2026 with vLLM 0.29.0, torch 2.13.0+cu130 and transformers 5.10.4, for the 0.8B, 2B and 4B releases. On every request both sides reported the same input-token count, and a second pass through the server returned identical answers. Differences from the release's float32 answers over the sweep set:
+
+| Size | Recording | Probability difference: median | p90 | max | Selections differing | Box IoU: median | p10 | min |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.8B | served, bfloat16 | 0.0017 | 0.0088 | 0.0194 | 1 of 48 | 0.989 | 0.962 | 0.790 |
+| 0.8B | release, bfloat16 | 0.0016 | 0.0084 | 0.0184 | 0 of 48 | 0.983 | 0.903 | 0.855 |
+| 0.8B | causal-mask control | 0.0381 | 0.1213 | 0.1800 | 6 of 48 | 0.724 | 0.235 | 0.008 |
+| 2B | served, bfloat16 | 0.0007 | 0.0131 | 0.0261 | 0 of 48 | 0.983 | 0.934 | 0.721 |
+| 2B | release, bfloat16 | 0.0006 | 0.0101 | 0.0416 | 0 of 48 | 0.980 | 0.866 | 0.719 |
+| 2B | causal-mask control | 0.0080 | 0.0554 | 0.1113 | 1 of 48 | 0.733 | 0.585 | 0.238 |
+| 4B | served, bfloat16 | 0.0002 | 0.0071 | 0.0191 | 0 of 48 | 0.991 | 0.981 | 0.856 |
+| 4B | release, bfloat16 | 0.0001 | 0.0101 | 0.0195 | 0 of 48 | 0.991 | 0.972 | 0.854 |
+| 4B | causal-mask control | 0.0037 | 0.0899 | 0.1930 | 1 of 48 | 0.862 | 0.758 | 0.496 |
+
+On the fixed set, which has 16 selected answers and 4 boxes per size, the largest probability difference between served and release bfloat16 answers was 0.028 (0.8B), 0.056 (2B) and 0.072 (4B), and no selected answer differed. The 4B run had one box at IoU 0.80 against the release's float32 box where the release's own bfloat16 box reached 0.98; over the 48 boxes of the sweep set the served 4B boxes match the release as closely as its own bfloat16 boxes do. A `--tolerance 1e-3` gate does not pass in bfloat16, for the served checkpoint or for the release compared with itself across precisions.
+
+The 9B and 27B releases are pinned and exported by the same code but were not run. These records are parity checks on drawn test images, not accuracy or latency results.
 
 ### Drex v2.0 (experimental)
 
@@ -1093,6 +1190,10 @@ In A800 Kev-0.8B stress tests, all three 1,200-request runs completed without un
 RTX 5090 trials reported up to about 5% throughput loss across the tested models. The A800 runs did not establish a speed benefit. Compare latency and throughput on your workload before enabling the mode.
 
 ## Updates
+
+### 2026-11-13
+
+- Added [Valen-Decision-1.5](#valen-decision-15) on Linux with CUDA: text, image and `bbox` decisions in one forward pass, with its own adapter, checkpoint format and serving options.
 
 ### 2026-10-10
 

@@ -627,6 +627,14 @@ class JevEndpointPlugin:
                     return await vjev.systemone(payload)
                 except ValueError as error:
                     raise HTTPException(status_code=422, detail=str(error)) from error
+            valen_decision = getattr(
+                raw_request.app.state, "vllm_valen_decision_service", None
+            )
+            if valen_decision is not None:
+                try:
+                    return await valen_decision.systemone(payload)
+                except ValueError as error:
+                    raise HTTPException(status_code=422, detail=str(error)) from error
             valen = getattr(raw_request.app.state, "vllm_valen_service", None)
             if valen is not None:
                 try:
@@ -646,12 +654,14 @@ class JevEndpointPlugin:
         state.vllm_jev_service = None
         state.vllm_laya_service = None
         state.vllm_valen_service = None
+        state.vllm_valen_decision_service = None
         state.vllm_vjev_service = None
         state.vllm_rsijev_service = None
         state.vllm_clef_service = None
         state.vllm_jevany_pointer_service = None
         manifest = Path(args.model) / "jev_manifest.json"
         valen_manifest = Path(args.model) / "valen_manifest.json"
+        valen_decision_manifest = Path(args.model) / "valen_decision_manifest.json"
         vjev_manifest = Path(args.model) / "vjev_manifest.json"
         laya_manifest = Path(args.model) / "laya_manifest.json"
         decision_manifest = Path(args.model) / "decision_manifest.json"
@@ -661,6 +671,7 @@ class JevEndpointPlugin:
         if engine_client is None or not (
             manifest.is_file()
             or valen_manifest.is_file()
+            or valen_decision_manifest.is_file()
             or vjev_manifest.is_file()
             or laya_manifest.is_file()
             or decision_manifest.is_file()
@@ -740,6 +751,17 @@ class JevEndpointPlugin:
                 Path(args.model),
                 getattr(args, "served_model_name", None) or "vjev",
                 engine_client.model_config.max_model_len,
+                max_inflight=max_inflight,
+            )
+            return
+        if valen_decision_manifest.is_file():
+            from .valen_decision import ValenDecisionService
+
+            state.vllm_valen_decision_service = ValenDecisionService(
+                engine_client,
+                Path(args.model),
+                getattr(args, "served_model_name", None) or "Valen",
+                engine_client.model_config.max_model_len - 1,
                 max_inflight=max_inflight,
             )
             return
