@@ -232,20 +232,21 @@ def main(argv=None):
     }
     rows, noise, timings = [], [], {"baseline": [], "cached": []}
     for index in range(args.states):
-        # One salt per state: the cached server reuses that state's blocks, the
-        # baseline server ignores the namespace but answers the same rows.
+        # One salt per state lets the cached server reuse that state's blocks.
+        # A server started with VLLM_JEV_KEV_PREFIX_CACHE=0 rejects cache_salt
+        # with 422, so the baseline gets the same rows without it.
         body = {
             "state": state_text(index, args.clauses),
             "questions": question_set(),
-            "cache_salt": f"kev-ab-state-{index}",
         }
+        salted = {**body, "cache_salt": f"kev-ab-state-{index}"}
         # Warm-up: the cached server's first request for a state is always a
         # miss, so it is neither timed nor compared.
         warm_baseline, _ = run_once(args.baseline_url, body, args.timeout)
-        run_once(args.cached_url, body, args.timeout)
+        run_once(args.cached_url, salted, args.timeout)
         for _ in range(args.repeats):
             baseline, left_s = run_once(args.baseline_url, body, args.timeout)
-            cached, right_s = run_once(args.cached_url, body, args.timeout)
+            cached, right_s = run_once(args.cached_url, salted, args.timeout)
             timings["baseline"].append(left_s)
             timings["cached"].append(right_s)
             # Every measured round counts, not only the last one.

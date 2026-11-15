@@ -156,8 +156,9 @@ def test_percentile_is_nearest_rank_on_sorted_values():
 class Server:
     """A System One server whose answers drift and whose cache counters move."""
 
-    def __init__(self, drift, hits_each_request):
+    def __init__(self, drift, hits_each_request, rejects_salt=False):
         self.drift = drift
+        self.rejects_salt = rejects_salt
         self.hits = 0
         self.hits_each_request = hits_each_request
         self.requests = 0
@@ -203,6 +204,15 @@ class Server:
                 body = json.loads(self.rfile.read(length))
                 outer.requests += 1
                 outer.salts.append(body.get("cache_salt"))
+                if outer.rejects_salt and "cache_salt" in body:
+                    # A server started with VLLM_JEV_KEV_PREFIX_CACHE=0 does
+                    # not support a shared prefix and answers 422.
+                    payload = b'{"error":{"code":422}}'
+                    self.send_response(422)
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 outer.hits += outer.hits_each_request
                 d = outer.drift
                 payload = json.dumps(
@@ -219,7 +229,7 @@ class Server:
 
 def test_end_to_end_passes_when_the_cache_only_moves_probabilities(tmp_path):
     output = tmp_path / "report.json"
-    with Server(drift=0.0, hits_each_request=0) as baseline:
+    with Server(drift=0.0, hits_each_request=0, rejects_salt=True) as baseline:
         with Server(drift=0.01, hits_each_request=8) as cached:
             code = runner().main(
                 [
@@ -249,6 +259,8 @@ def test_end_to_end_passes_when_the_cache_only_moves_probabilities(tmp_path):
     assert report["noise_floor"]["max_delta"] == 0.0
     # One salt per state, reused by every round so the state can be cached.
     assert sorted(set(cached.salts)) == ["kev-ab-state-0", "kev-ab-state-1"]
+    # The uncached server rejects cache_salt, so it never receives one.
+    assert set(baseline.salts) == {None}
 
 
 def test_end_to_end_fails_when_cached_answers_do_not_match(tmp_path):
