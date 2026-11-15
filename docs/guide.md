@@ -691,6 +691,10 @@ The large Kev pointer models (`kev-4b`, `kev-27b`) serve natively on Linux CUDA.
 
 Real-weight single-A800 acceptance passed for both Kev-4B and Kev-27B: each completed six client-concurrency arms of 256 requests (1,536 total), plus longer-input, invalid-input and disconnect-recovery checks. The [native CUDA validation report](kev-native-validation.md) records the exact revisions, budgets and short-sweep measurements. These checks do not establish original-author output parity or decision accuracy.
 
+Kev reads the native prefix cache (experimental). vLLM 0.29 defaults `skip_reading_prefix_cache` to true for `token_embed` requests, because a cache hit returns hidden states only for the tokens it computed; earlier releases therefore recomputed the whole state for every question and `prefix_cache_queries_total` stayed at 0. Kev's readouts (each option's closing marker and the final marker) all follow the shared state, so the adapter now reads the cache explicitly. When a hit ends before the first readout, the returned states cover every readout. Otherwise the row is computed again without the cache. `metadata.cached_tokens` and `metadata.uncached_reruns` report both outcomes. Questions in one request share a fresh cache namespace. Pass a trusted `cache_salt` to reuse a state across requests; the Kev backend now accepts it. Set `VLLM_JEV_KEV_PREFIX_CACHE=0` to restore the previous uncached behavior. Drex and the label-readout decision protocols keep the engine default.
+
+This path is covered by CPU tests against an engine double that reproduces vLLM 0.29's partial-state return shape. It has not yet passed real-weight GPU acceptance. Before relying on it, compare probabilities with `VLLM_JEV_KEV_PREFIX_CACHE=0` on the same requests, and confirm that `vllm:prefix_cache_hits_total` increases.
+
 <a id="rsi-jev-experimental"></a>
 
 ### JevAny Pointer

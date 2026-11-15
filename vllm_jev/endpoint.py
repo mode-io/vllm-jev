@@ -572,12 +572,18 @@ class JevEndpointPlugin:
             except ValueError as error:
                 raise HTTPException(status_code=422, detail=str(error)) from error
             if payload.cache_salt is not None:
-                service = getattr(raw_request.app.state, "vllm_jev_service", None)
-                if not getattr(service, "supports_shared_prefix_cache", False):
+                services = (
+                    getattr(raw_request.app.state, "vllm_jev_service", None),
+                    getattr(raw_request.app.state, "vllm_decision_service", None),
+                )
+                if not any(
+                    getattr(service, "supports_shared_prefix_cache", False)
+                    for service in services
+                ):
                     raise HTTPException(
                         status_code=422,
                         detail="cache_salt requires a native vLLM Open-Jev "
-                        "sequence-classification backend",
+                        "sequence-classification backend or a Kev pointer backend",
                     )
             clef = getattr(raw_request.app.state, "vllm_clef_service", None)
             if (payload.images or payload.videos) and clef is None:
