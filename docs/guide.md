@@ -693,7 +693,18 @@ Real-weight single-A800 acceptance passed for both Kev-4B and Kev-27B: each comp
 
 Kev reads the native prefix cache (experimental). vLLM 0.29 defaults `skip_reading_prefix_cache` to true for `token_embed` requests, because a cache hit returns hidden states only for the tokens it computed; earlier releases therefore recomputed the whole state for every question and `prefix_cache_queries_total` stayed at 0. Kev's readouts (each option's closing marker and the final marker) all follow the shared state, so the adapter now reads the cache explicitly. When a hit ends before the first readout, the returned states cover every readout. Otherwise the row is computed again without the cache. `metadata.cached_tokens` and `metadata.uncached_reruns` report both outcomes. Questions in one request share a fresh cache namespace. Pass a trusted `cache_salt` to reuse a state across requests; the Kev backend now accepts it. Set `VLLM_JEV_KEV_PREFIX_CACHE=0` to restore the previous uncached behavior. Drex and the label-readout decision protocols keep the engine default.
 
-This path is covered by CPU tests against an engine double that reproduces vLLM 0.29's partial-state return shape. It has not yet passed real-weight GPU acceptance. Before relying on it, compare probabilities with `VLLM_JEV_KEV_PREFIX_CACHE=0` on the same requests, and confirm that `vllm:prefix_cache_hits_total` increases.
+This path is covered by CPU tests against an engine double that reproduces vLLM 0.29's partial-state return shape. It has not yet passed real-weight GPU acceptance.
+
+Before relying on it, run the A/B script against two servers over the same model and requests:
+
+```bash
+VLLM_JEV_KEV_PREFIX_CACHE=0 vllm-jev serve <model> --port 8001 &
+VLLM_JEV_KEV_PREFIX_CACHE=1 vllm-jev serve <model> --port 8002 &
+python scripts/kev_cache_ab.py --baseline-url http://127.0.0.1:8001 \
+  --cached-url http://127.0.0.1:8002 --states 4 --clauses 300 --output ab.json
+```
+
+The script compares every measured round and reports the largest per-question probability delta, the argmax flips, and a noise floor: the uncached server against itself over the same rounds. A drift no larger than that floor is not attributable to the cache. It fails by default on any flip, or on a delta above `--max-delta` (0.05), and also fails when `vllm:prefix_cache_hits_total` never increased, which means the A/B measured nothing. Use `--max-flips` only when the downstream consumer reads probabilities rather than the chosen option; SGLang measured up to 0.07 drift with no flips on comparable hybrid-attention models.
 
 <a id="rsi-jev-experimental"></a>
 
