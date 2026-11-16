@@ -3,6 +3,7 @@
 import asyncio
 import json
 import math
+import os
 import re
 import secrets
 import time
@@ -481,6 +482,10 @@ class DecisionCompiler:
 
 
 class DecisionService:
+    # Drex subclasses this without the Kev readout layout, so it keeps the
+    # engine default until an explicit opt-in is proven safe.
+    read_prefix_cache = False
+
     def __init__(
         self,
         engine_client,
@@ -496,6 +501,17 @@ class DecisionService:
         self.head = load_file(str(checkpoint / "decision_head.safetensors"))
         self.semaphore = asyncio.Semaphore(max_inflight)
         self.compile_lock = asyncio.Lock()
+        # Kev reads its pointer head after the shared state, so a cache hit
+        # that stops before the first readout is safe; other protocols keep
+        # the engine default.
+        self.read_prefix_cache = (
+            self.compiler.protocol == "kev_pointer_v1"
+            and os.environ.get("VLLM_JEV_KEV_PREFIX_CACHE") != "0"
+        )
+
+    @property
+    def supports_shared_prefix_cache(self):
+        return self.read_prefix_cache
 
     def _probabilities(self, hidden, positions, count, kind):
         head = self.head
@@ -521,6 +537,30 @@ class DecisionService:
         return torch.softmax(logits / temperature, -1).tolist()
 
     async def _encode(self, ids, salt, positions):
+        """Final hidden states at ``positions``, reading vLLM's prefix cache.
+
+        vLLM 0.29 skips cache reads for ``token_embed`` unless told otherwise,
+        because a hit returns states only for the tokens it computed. Every
+        readout follows the shared state, so a hit that stops before the first
+        readout is enough; otherwise the row is computed again without the
+        cache. Returns ``(states, cached_tokens, reruns)``.
+        """
+        reruns = 0
+        need_from = min(positions)
+        for read_cache in (self.read_prefix_cache, False):
+            hidden, cached = await self._encode_once(ids, salt, read_cache)
+            offset = len(ids) - hidden.shape[0]
+            if offset <= need_from:
+                # Advanced indexing owns its storage; the completed task must not
+                # retain the full token-embedding response until all questions
+                # finish.
+                return hidden[[p - offset for p in positions]], cached, reruns
+            if not read_cache:
+                raise RuntimeError("vLLM returned partial states without a cache read")
+            reruns += 1
+        raise AssertionError("unreachable")
+
+    async def _encode_once(self, ids, salt, read_cache):
         from vllm import PoolingParams
 
         request_id = f"decision-{uuid.uuid4().hex}"
@@ -531,21 +571,28 @@ class DecisionService:
                 async for output in self.engine_client.encode(
                     prompt={"prompt_token_ids": ids, "cache_salt": salt},
                     pooling_params=PoolingParams(
-                        task="token_embed", use_activation=False
+                        task="token_embed",
+                        use_activation=False,
+                        skip_reading_prefix_cache=not read_cache,
                     ),
                     request_id=request_id,
                 ):
                     final = output
-                if final is None or not final.finished or final.prompt_token_ids != ids:
+                if (
+                    final is None
+                    or not final.finished
+                    or list(final.prompt_token_ids) != ids
+                ):
                     raise RuntimeError("vLLM did not return expected decision tokens")
                 hidden = torch.as_tensor(final.outputs.data)
-                if hidden.shape != (len(ids), self.compiler.manifest["hidden_size"]):
+                if (
+                    hidden.ndim != 2
+                    or hidden.shape[1] != self.compiler.manifest["hidden_size"]
+                    or not 0 < hidden.shape[0] <= len(ids)
+                ):
                     raise RuntimeError("vLLM returned incomplete decision states")
-                # Advanced indexing owns its storage; the completed task must not
-                # retain the full token-embedding response until all questions finish.
-                hidden = hidden[positions]
                 complete = True
-                return hidden
+                return hidden, int(getattr(final, "num_cached_tokens", 0) or 0)
             finally:
                 if not complete:
                     with suppress(Exception):
@@ -557,7 +604,7 @@ class DecisionService:
         slots = readouts[key]
         if key not in encoded:
             encoded[key] = asyncio.create_task(self._encode(ids, salt, list(slots)))
-        hidden = await encoded[key]
+        hidden, _, _ = await encoded[key]
         return self._probabilities(hidden, [slots[p] for p in positions], count, kind)
 
     async def systemone(self, payload):
@@ -568,7 +615,10 @@ class DecisionService:
             self.compile_lock, self.compiler.compile, payload
         )
         answers = {}
-        salt = secrets.token_hex(16)
+        # A trusted caller's salt shares the state's cache blocks across
+        # requests; otherwise a fresh salt shares them only among this
+        # request's questions.
+        salt = payload.cache_salt or secrets.token_hex(16)
         input_tokens = state_tokens
         compute_tokens = 0
         encoded = {}
@@ -596,10 +646,15 @@ class DecisionService:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(*encoded.values(), return_exceptions=True)
+        results = [task.result() for task in encoded.values()]
         return {
             "model": self.model_id,
             "answers": answers,
             "usage": {"input_tokens": input_tokens, "output_tokens": 0},
             "internal_usage": {"compute_tokens": compute_tokens},
-            "metadata": {"inference_seconds": time.perf_counter() - started},
+            "metadata": {
+                "cached_tokens": sum(cached for _, cached, _ in results),
+                "uncached_reruns": sum(reruns for _, _, reruns in results),
+                "inference_seconds": time.perf_counter() - started,
+            },
         }
