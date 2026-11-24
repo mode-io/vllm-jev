@@ -69,7 +69,7 @@ vLLM Jev serves compatible Jev-style checkpoints through [vLLM](https://github.c
 - **Apple Silicon preview:** run supported text models through MLX or PyTorch MPS, and Valen multimodal decisions through MLX.
 - **Windows CPU (experimental):** twenty-four validated text/JSON checkpoints: the three Laya releases, Tiny-Jev and Tiny-Jev-1.7B, OpenJev-0.6B, Open-Jev-2B, Decider-0.8B/2B, Decider-4B Q4_K_M, JevK5-2B, JevK5-Lite, JevK5 4B/9B Q5_K_M, Kev-0.6B/0.8B, This-That 1.0/1.1/1.2, Mica-v0.1-4B Q5_K_M, Decision-0.8B Q8_0, Bruv1-0.8B FP32, Decision-4B Q4_K_M and RSI v1.0-0.8B FP32. See the [Windows guide](docs/guide.md#windows-cpu-experimental) and [Tiny 1.7B / JevK5 9B acceptance](docs/windows-tiny17-jev9.md) for isolated environments and limits.
 - **Structured decisions:** Choice, Noul (yes/no), and Score (ordered levels) over HTTP.
-- **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen and Clef also accept [short videos](docs/guide.md#video-input); platform availability and request formats are model-specific.
+- **Multimodal inference:** Valen, vjev, RSI-Jev v4.0-VL, JevAny Pointer, and Clef accept text and images. Valen-Preview and Clef also accept [short videos](docs/guide.md#video-input); [Valen-Decision-1.5](docs/guide.md#valen-decision-15) answers every question about a state in one pass and adds `bbox` questions that return a box over an image. Platform availability and request formats are model-specific.
 - **RadixFlow (experimental, opt-in):** bounded admission and state-ready traversal fill shared-prefix execution rounds. See [configuration](docs/radixflow.md) and [pressure-test results](docs/radixflow-benchmarks.md).
 - **Automatic setup:** start a supported Hugging Face model ID with one command.
 
@@ -162,6 +162,7 @@ Windows precision and quantization notes beside model names are part of the supp
 | [lostargon/Tiny-Jev](https://huggingface.co/lostargon/Tiny-Jev) | Text | Linux (CUDA, Ascend), Mac, Windows | `vllm-jev serve lostargon/Tiny-Jev` |
 | [lostargon/Tiny-Jev-1.7B](https://huggingface.co/lostargon/Tiny-Jev-1.7B) (Windows: FP32) | Text | Windows | `vllm-jev serve lostargon/Tiny-Jev-1.7B` |
 | [Valen-Team/Valen-Preview-0923](https://huggingface.co/Valen-Team/Valen-Preview-0923) | Text, images, video | Linux (CUDA; Ascend text only), Mac | `vllm-jev serve Valen-Team/Valen-Preview-0923` |
+| [Valen-Team/Valen-Decision-1.5-0.8B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-0.8B) … [27B](https://huggingface.co/Valen-Team/Valen-Decision-1.5-27B) | Text, images, boxes | Linux (CUDA) | `vllm-jev serve Valen-Team/Valen-Decision-1.5-0.8B` |
 | [yah01/vjev-vision](https://huggingface.co/yah01/vjev-vision) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision` |
 | [yah01/vjev-vision-pilot](https://huggingface.co/yah01/vjev-vision-pilot) | Text, images | Linux (CUDA; Ascend text only) | `vllm-jev serve yah01/vjev-vision-pilot` |
 | [shgao/rsi-jev-v4.0-vl-qwen3.5-2b](https://huggingface.co/shgao/rsi-jev-v4.0-vl-qwen3.5-2b) | Text, images | Linux (CUDA, Ascend) | `vllm-jev serve shgao/rsi-jev-v4.0-vl-qwen3.5-2b` |
@@ -174,6 +175,8 @@ Windows precision and quantization notes beside model names are part of the supp
 
 <a id="rsi-jev-experimental"></a>
 <a id="clef-experimental"></a>
+
+Valen-Decision-1.5 covers five pinned releases. The contributor reports GPU checks for 0.8B, 2B and 4B; 9B and 27B GPU acceptance remains unvalidated. See the [internal integration scope](docs/valen-decision-validation.md).
 
 The RSI-Jev Linux adapter was contributed by [Shanghua Gao (PR #2)](https://github.com/mode-io/vllm-jev/pull/2), and the Clef adapter by [Arcobalneo (PR #4)](https://github.com/mode-io/vllm-jev/pull/4). See the [RSI-Jev](docs/guide.md#rsi-jev) and [Clef](docs/guide.md#clef) guides for input limits and request formats.
 
@@ -264,6 +267,8 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 ### 2026-11-24
 
 - Added experimental native prefix-cache reads for Kev on the supported CUDA pooling API. Trusted `cache_salt` values can reuse state prefixes across requests; hits that cover a required readout fall back to a full pass. Ascend, legacy pooling APIs and other decision protocols retain their previous cache behavior. See the [integration scope and validation limits](docs/kev-prefix-cache-validation.md).
+
+- Added the experimental Valen-Decision-1.5 CUDA adapter with block attention and image `bbox` questions. The previous Valen-Preview adapter is unchanged; see the [internal validation scope](docs/valen-decision-validation.md) for local tests and contributor measurements.
 
 ### 2026-10-22
 
