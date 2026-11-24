@@ -24,10 +24,21 @@ HIT_METRIC = "vllm:prefix_cache_hits_total"
 def probabilities_of(kind, answer):
     """The answer's option probabilities, keyed as the request named them."""
     if kind == "noul":
-        return {"true": float(answer["noul"])}
-    values = answer.get("probabilities")
+        values = {"true": answer["noul"]}
+    else:
+        values = answer.get("probabilities")
     if not isinstance(values, dict) or not values:
         raise ValueError(f"{kind} answer has no probability vector")
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0 <= value <= 1
+        for value in values.values()
+    ):
+        raise ValueError("answer probabilities must be finite values in [0, 1]")
+    if kind != "noul" and not math.isclose(sum(values.values()), 1.0, abs_tol=1e-5):
+        raise ValueError("answer probabilities must sum to one")
     return {key: float(value) for key, value in values.items()}
 
 
@@ -98,6 +109,12 @@ def summarize(rows):
 def verdict(stats, max_delta, max_flips):
     """Whether this run is acceptable, and the reasons it is not."""
     reasons = []
+    if not math.isfinite(max_delta) or max_delta < 0 or max_flips < 0:
+        raise ValueError("comparison thresholds must be finite and nonnegative")
+    if not math.isfinite(stats["max_delta"]):
+        reasons.append("nonfinite probability drift")
+    if stats.get("questions", 1) <= 0:
+        reasons.append("no questions were compared")
     if stats["flips"] > max_flips:
         reasons.append(
             f"{stats['flips']} argmax flips exceed the {max_flips} allowed: "
@@ -292,7 +309,7 @@ def main(argv=None):
         "limits": {"max_delta": args.max_delta, "max_flips": args.max_flips},
         **result,
     }
-    if not hits["cached"]["hits"]:
+    if not math.isfinite(hits["cached"]["hits"]) or hits["cached"]["hits"] <= 0:
         evidence["passed"] = False
         evidence["reasons"].append(
             f"the cached server recorded no {HIT_METRIC} increase; check "

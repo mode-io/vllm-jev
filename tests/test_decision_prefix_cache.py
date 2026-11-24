@@ -274,3 +274,54 @@ def test_endpoint_still_rejects_salt_for_non_kev_decisions(tmp_path):
     )
     assert response.status_code == 422
     assert not engine.requests
+
+
+def test_legacy_pooling_api_keeps_full_state_path(tmp_path, monkeypatch):
+    import sys
+
+    class LegacyPoolingParams:
+        def __init__(self, task, use_activation):
+            self.skip_reading_prefix_cache = True
+
+    monkeypatch.setattr(sys.modules["vllm"], "PoolingParams", LegacyPoolingParams)
+    engine = CachingEngine(cached=40)
+    service = make_service(tmp_path, engine)
+    assert not service.supports_shared_prefix_cache
+    response = run(service)
+    assert response["metadata"]["cached_tokens"] == 0
+    with pytest.raises(ValueError, match="cache_salt"):
+        run(service, {**PAYLOAD, "cache_salt": "tenant-a"})
+
+
+def test_ascend_does_not_enable_unvalidated_cache_reads(tmp_path, monkeypatch):
+    from vllm_jev import backend
+
+    monkeypatch.setattr(backend, "resolve_backend", lambda: "ascend")
+    engine = CachingEngine(cached=40)
+    service = make_service(tmp_path, engine)
+    assert not service.supports_shared_prefix_cache
+    response = run(service)
+    assert response["metadata"]["cached_tokens"] == 0
+    assert all(params.skip_reading_prefix_cache for _, params in engine.requests)
+
+
+def test_disabled_cache_rejects_unexpected_partial_states(tmp_path, monkeypatch):
+    class TruncatedEngine(CachingEngine):
+        async def encode(self, prompt, pooling_params, request_id):
+            ids = list(prompt["prompt_token_ids"])
+            yield SimpleNamespace(
+                finished=True,
+                prompt_token_ids=ids,
+                num_cached_tokens=1,
+                outputs=SimpleNamespace(data=self.states(ids)[1:]),
+            )
+
+    monkeypatch.setenv("VLLM_JEV_KEV_PREFIX_CACHE", "0")
+    with pytest.raises(RuntimeError, match="incomplete decision states"):
+        run(make_service(tmp_path, TruncatedEngine()))
+
+
+def test_protocol_gate_is_checked_when_reporting_support(tmp_path):
+    service = make_service(tmp_path, CachingEngine())
+    service.compiler.protocol = "task_json_v1"
+    assert not service.supports_shared_prefix_cache

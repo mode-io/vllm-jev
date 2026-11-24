@@ -261,11 +261,18 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
 
 ## Updates
 
+### 2026-11-24
+
+- Added experimental native prefix-cache reads for Kev on the supported CUDA pooling API. Trusted `cache_salt` values can reuse state prefixes across requests; hits that cover a required readout fall back to a full pass. Ascend, legacy pooling APIs and other decision protocols retain their previous cache behavior. See the [integration scope and validation limits](docs/kev-prefix-cache-validation.md).
+
 ### 2026-10-22
 
 - Added native CUDA serving for the pinned Kev-27B v2 full-weight release and composite-base Kev LoRA export. Kev-4B and Kev-27B each passed 1,536 measured requests on one A800, plus long-input, rejection and disconnect-recovery checks. Preparation now rejects inconsistent LoRA rank and invalid scaling metadata. See the [workload, short-sweep results and validation limits](docs/kev-native-validation.md).
 - Added experimental native Windows x64 CPU serving for 24 checkpoints, with four isolated dependency profiles and model-specific FP32, BF16 or GGUF artifacts. See the [Windows setup and model table](docs/guide.md#windows-cpu-experimental).
 - Updated Supported Models to show CUDA, Ascend, Mac and Windows coverage together. The Ascend matrix now records 23 text API model results, with separate image-path functional checks for JevAny and RSI v4.
+
+<details>
+<summary>Earlier updates</summary>
 
 ### 2026-10-20
 
@@ -281,9 +288,6 @@ A full-attention [OpenJev-0.6B control](docs/radixflow-benchmarks.md#openjev-06b
   for the workload and limits.
 - CUDA installs now use `.[cuda]` so NPU environments do not inherit a forced
   CUDA runtime dependency. Existing CUDA execution remains pinned to vLLM 0.29.0.
-
-<details>
-<summary>Earlier updates</summary>
 
 ### 2026-10-19
 

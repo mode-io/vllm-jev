@@ -1,6 +1,7 @@
 """Typed decisions from native pooling states and released readout heads."""
 
 import asyncio
+import inspect
 import json
 import math
 import os
@@ -9,6 +10,7 @@ import secrets
 import time
 import uuid
 from contextlib import suppress
+from functools import lru_cache
 from pathlib import Path
 
 import torch
@@ -481,6 +483,14 @@ class DecisionCompiler:
         return prepared, state_tokens
 
 
+@lru_cache(maxsize=16)
+def _pooling_supports_cache_flag(pooling_type):
+    try:
+        return "skip_reading_prefix_cache" in inspect.signature(pooling_type).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 class DecisionService:
     # Drex subclasses this without the Kev readout layout, so it keeps the
     # engine default until an explicit opt-in is proven safe.
@@ -511,7 +521,17 @@ class DecisionService:
 
     @property
     def supports_shared_prefix_cache(self):
-        return self.read_prefix_cache
+        if not self.read_prefix_cache or self.compiler.protocol != "kev_pointer_v1":
+            return False
+        from vllm import PoolingParams
+
+        from .backend import resolve_backend
+
+        # Ascend's validated stack keeps its previous full-state behavior.
+        return resolve_backend() not in (
+            "ascend",
+            "cpu",
+        ) and _pooling_supports_cache_flag(PoolingParams)
 
     def _probabilities(self, hidden, positions, count, kind):
         head = self.head
@@ -547,7 +567,7 @@ class DecisionService:
         """
         reruns = 0
         need_from = min(positions)
-        for read_cache in (self.read_prefix_cache, False):
+        for read_cache in (self.supports_shared_prefix_cache, False):
             hidden, cached = await self._encode_once(ids, salt, read_cache)
             offset = len(ids) - hidden.shape[0]
             if offset <= need_from:
@@ -563,6 +583,13 @@ class DecisionService:
     async def _encode_once(self, ids, salt, read_cache):
         from vllm import PoolingParams
 
+        params = {"task": "token_embed", "use_activation": False}
+        if _pooling_supports_cache_flag(PoolingParams):
+            params["skip_reading_prefix_cache"] = not read_cache
+        elif read_cache:
+            raise RuntimeError(
+                "this vLLM pooling API does not support prefix-cache reads"
+            )
         request_id = f"decision-{uuid.uuid4().hex}"
         complete = False
         async with self.semaphore:
@@ -570,11 +597,7 @@ class DecisionService:
                 final = None
                 async for output in self.engine_client.encode(
                     prompt={"prompt_token_ids": ids, "cache_salt": salt},
-                    pooling_params=PoolingParams(
-                        task="token_embed",
-                        use_activation=False,
-                        skip_reading_prefix_cache=not read_cache,
-                    ),
+                    pooling_params=PoolingParams(**params),
                     request_id=request_id,
                 ):
                     final = output
@@ -589,6 +612,7 @@ class DecisionService:
                     hidden.ndim != 2
                     or hidden.shape[1] != self.compiler.manifest["hidden_size"]
                     or not 0 < hidden.shape[0] <= len(ids)
+                    or (not read_cache and hidden.shape[0] != len(ids))
                 ):
                     raise RuntimeError("vLLM returned incomplete decision states")
                 complete = True
@@ -618,6 +642,8 @@ class DecisionService:
         # A trusted caller's salt shares the state's cache blocks across
         # requests; otherwise a fresh salt shares them only among this
         # request's questions.
+        if payload.cache_salt is not None and not self.supports_shared_prefix_cache:
+            raise ValueError("cache_salt requires a supported Kev prefix-cache backend")
         salt = payload.cache_salt or secrets.token_hex(16)
         input_tokens = state_tokens
         compute_tokens = 0

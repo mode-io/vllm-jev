@@ -339,3 +339,21 @@ def test_every_measured_round_is_compared_and_warm_up_is_not(tmp_path):
     report = json.loads(output.read_text())
     assert len(report["rows"]) == 2 * 3 * len(QUESTIONS)
     assert len(report["timing_s"]) == 2
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -0.1, 1.1, True])
+def test_invalid_probabilities_never_pass_comparison(value):
+    with pytest.raises(ValueError, match="finite"):
+        runner().probabilities_of("noul", {"noul": value})
+
+
+def test_non_normalized_vector_is_rejected():
+    with pytest.raises(ValueError, match="sum to one"):
+        runner().probabilities_of("choice", {"probabilities": {"a": 0.7, "b": 0.7}})
+
+
+def test_nan_drift_does_not_pass():
+    verdict = runner().verdict(
+        {"max_delta": float("nan"), "flips": 0, "flipped": []}, 0.05, 0
+    )
+    assert not verdict["passed"]
